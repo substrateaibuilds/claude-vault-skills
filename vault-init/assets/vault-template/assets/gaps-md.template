@@ -1,0 +1,22 @@
+# GAPS — Known Knowledge Gaps
+
+*Generated: {{DATE}} — initial scaffold. Populated during ingestion. Use this file to prioritize future ingest passes.*
+
+---
+
+## How to Use This File
+
+- **GAP** = knowledge that should exist in the wiki but doesn't (referenced in a source but never defined, formula named but values missing, concept mentioned but not explained, etc.)
+- **CONFLICT** = contradictions between source files (e.g., older protocol vs. newer)
+- **STUB** = pages that exist but have minimal content
+- Source files that may contain the missing information are noted where known
+
+---
+
+{{DOMAIN_GAP_SECTIONS}}
+
+---
+
+## CONFLICTS (Contradictions Requiring Resolution)
+
+_(populated during ingestion)_

@@ -1,0 +1,23 @@
+# Wiki Operation Log
+
+## {{DATE}} — Pass 0: Scaffold
+
+**Status:** COMPLETE
+
+Created:
+- `CLAUDE.md` — project instructions, ingestion rules, page template
+- `wiki/` folder with subfolders: {{SUBFOLDER_LIST}}
+- `wiki/index.md` (stub)
+- `wiki/hot.md` (stub)
+- `wiki/log.md` (this file)
+- `wiki/GAPS.md` (stub)
+{{DOMAIN_INDEX_BULLET_LIST}}
+- `INGESTION-PROMPT.md` (vault root — paste-ready prompt for Phase 1–6 ingestion)
+
+Source file inventory: _(pending — populated after Pass 1 scan)_
+
+---
+
+## {{DATE}} — Pass 1: Source File Scan
+
+**Status:** PENDING — paste the contents of `INGESTION-PROMPT.md` into Claude Code to begin.

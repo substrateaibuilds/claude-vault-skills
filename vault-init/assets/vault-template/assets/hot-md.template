@@ -1,0 +1,21 @@
+# Hot — Recent Changes Cache
+
+*Last updated: {{DATE}} — initial scaffold (ingestion pending)*
+
+---
+
+## Current Status
+
+**Ingestion pending.** Drop source files in `raw/` and paste the contents of `INGESTION-PROMPT.md` (vault root) into Claude Code to begin.
+
+---
+
+## Most Recent Session
+
+_(populated after first ingest pass — typically a ~500-word summary of the most important findings from the latest batch)_
+
+---
+
+## Standing Gaps (Active)
+
+_(populated from GAPS.md after first ingest pass)_

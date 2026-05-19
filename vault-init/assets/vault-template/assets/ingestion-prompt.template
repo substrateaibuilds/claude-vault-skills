@@ -1,0 +1,254 @@
+# Ingestion Prompt — {{VAULT_TITLE}}
+
+**Paste the block below into Claude Code running from this vault root (`~/Documents/Obsidian/{{VAULT_NAME}}`) when you have raw files in `raw/` ready to process. Everything from the `---` down is the prompt.**
+
+---
+
+You are ingesting source files into a structured Obsidian wiki for {{OWNER_NAME}}.
+
+## Context
+
+{{VAULT_PURPOSE}}
+
+Source files live in `raw/`. Organized output goes into `wiki/`. The `CLAUDE.md` at the vault root explains the folder structure, domain indexes, page template, confidence taxonomy, and critical rules — **read it first before extracting anything**.
+
+{{DOWNSTREAM_CONSUMERS_SECTION}}
+
+## Source Types Expected
+
+{{RAW_SOURCE_TYPES}}
+
+## Architecture (read this first — required for any ingest of >20 source files)
+
+Four lessons from prior vault builds. Apply all four; they are not optional.
+
+1. **Never process bulk files in your main context.** With dozens-to-hundreds of source files, any serial Read → Write loop in main context will exhaust your context budget and run ~10× slower than the parallel pattern. Instead: spawn `general-purpose` background subagents, one per source file, **~10 in parallel per turn**, by sending multiple Agent tool calls in a single assistant message with `run_in_background: true`. You orchestrate; you do not ingest.
+
+2. **Use a shared briefing file.** Don't paste the project rules + slug inventory + template into every subagent prompt — that bloats prompts ~25× for no benefit. Instead, write `wiki/_ingest-briefing.md` once with the rules, the existing-slug inventory, the source-page template, and the return-value discipline. Every subagent prompt then becomes ~10 lines: "Read the briefing. Read /path/to/source. Write /path/to/output. Return CREATED: <path>."
+
+3. **Use shell pipelines for big aggregations.** Phase 6 tasks like populating GAPS.md can hit the 32k output-token cap if a subagent generates the listing as model output. Instead, have the subagent run `grep -rn "GAP:" ... | awk ... > GAPS.md` and return only a terse completion message. Same pattern for master-index rebuild and any listing >1000 lines.
+
+4. **Phase 2 scope is about cognitive load, not file size.** The "5-10 foundational files" rule means: ingest enough material in main context to establish a concept/slug inventory that Phase 3 subagents can link to. It does NOT mean "only process small files in main context." A small corpus may need only 3 files; a complex one may need 8. Judge by whether you have enough slug coverage to prevent Phase 3 subagents from duplicating concepts.
+
+{{SEQUENTIAL_FALLBACK_NOTE}}
+
+**If `raw/` contains any PDFs:** pre-extract them to plain text via `pdftotext -layout` (poppler; `brew install poppler`) into `/tmp/{{VAULT_NAME}}/`. The Read tool renders PDFs as images and a 20-page PDF can exceed the 32 MB request limit. Text extraction gives a ~30× size reduction. If a PDF returns near-empty text (image-only PDF), check for a sibling `.md` or `.txt` file and use that instead. Skip this step entirely if `raw/` is already plain text.
+
+**Subagent type:** always `general-purpose` (Explore is read-only and can't Write).
+
+**Pre-existing wikis:** if a raw source file is itself a complete wiki or structured knowledge base, do NOT re-ingest its contents. Create ONE source-summary page cataloguing its scope, and add cross-links to the relevant concepts. Re-ingesting creates shadow copies that diverge.
+
+## Phase 1 — Scan & Categorize
+
+1. List all files in `raw/` recursively. Group by file type, content type, rough domain.
+2. If any are PDFs, run `pdftotext -layout` on each into `/tmp/{{VAULT_NAME}}/`. If any PDF returns near-empty output, log it as IMAGE-ONLY and note the fallback file if one exists.
+3. Detect near-duplicates by hashing extracted text (`sha256sum`). Log any pairs for Phase 5.
+4. Pre-compute a slug mapping: for every source file, determine its intended output path (`wiki/sources/<slug>.md`) now. This prevents collisions when parallel subagents launch. For tweet/thread files with near-duplicate titles, append the last 4 digits of the tweet ID to disambiguate (e.g., `hormozi-thread-1537.md` not `hormozi-thread.md`).
+5. **Verify file dates.** For memos, letters, or dated documents: do not trust the slug/filename date. Read each foundational file's internal content to confirm the actual date. File slug dates are often wrong (created date ≠ publication date; series numbering conflicts; "undated" files often have dates buried in the body). Document any discrepancy in the source page with a `Note:` field.
+6. Report the inventory back (table: category | path | file count | notes). Propose a batching plan before extracting anything.
+7. Append the scan results to `wiki/log.md` under `## Pass 1: Scan`.
+
+## Phase 2 — Foundational Material (main context, 4–10 files)
+
+Ingest the small structural/foundational set first (typically 4-10 files): courses, methodology references, primary frameworks, textbook-style references. The goal is to **establish the concept/slug inventory** that Phase 3's parallel subagents will link to instead of duplicating. Judge scope by coverage, not file size.
+
+For each foundational file:
+1. Read fully.
+2. Check the internal date against the filename date (Phase 1 rule applies here too).
+3. Create a source summary at `wiki/sources/<slug>.md` per the Source Page Template below.
+4. Extract foundational content into appropriate wiki pages (concepts, frameworks, entities) per the Page Template in CLAUDE.md.
+5. Append progress to `log.md`.
+
+When done, write `wiki/_ingest-briefing.md` containing:
+- Project context (1 paragraph)
+- Critical rules (never invent, flag `GAP:`/`CONFLICT:`, `{{VOICE_RULE}}`, bidirectional linking, `{{ANONYMIZATION_RULE}}`, never merge distinct concepts)
+- Confidence taxonomy (copy verbatim from CLAUDE.md's `## Confidence Taxonomy` section)
+- The slug inventory built during Phase 2 (all concepts, entities, frameworks created)
+- The full Source Page Template (sections, exact structure)
+- Filename convention (`wiki/sources/<kebab-case-slug>.md` derived from slug mapping computed in Phase 1)
+- Return-value discipline: "After writing, return ONLY: `CREATED: wiki/sources/<filename>`. No summary, no commentary."
+- Content extraction guidance for conversational source files: capture diagnostic moments (presentation + reasoning), decisions and prescriptions, named frameworks in action, recurring patterns. {{VOICE_EXTRACTION_NOTE}} {{CONVERSATIONAL_ANONYMIZATION_NOTE}}
+
+## Source Page Template
+
+Every `wiki/sources/<slug>.md` page must follow this exact structure. This template is non-negotiable — it is the primary data structure for Phase 4 synthesis.
+
+```markdown
+# Source: [Full Title]
+
+> **Historical context:** [Why this document was written, when, and what situation it responded to. Required for crisis-era, time-sensitive, or polemical documents. Omit only for purely technical references.]
+
+- **Type:** [memo | shareholder letter | essay | transcript | book chapter | course module | interview | etc.]
+- **Content Date:** [publication/creation date of the original — NOT the date you processed it. If internal date ≠ filename date, note both and explain.]
+- **Domain(s):** [list all that apply]
+- **File path:** `raw/<relative/path/to/file>`
+
+## Abstract / Key Question
+[3 sentences: what the document is + what question it answers + WHY it was written or why it matters]
+
+## Key Findings
+
+1. **[Bold finding header]** [Substantive paragraph. Embed verbatim quotes inline using quotation marks. Each finding is a complete thought, not a bullet fragment.]
+2. **[Bold finding header]** [...]
+3. **[Bold finding header]** [...]
+4. **[Bold finding header]** [...]
+5. **[Bold finding header]** [...]
+6. **[Bold finding header]** [...]
+7. **[Bold finding header]** [...]
+8. **[Bold finding header]** [...]
+9. **[Bold finding header]** [...]
+10. **[Bold finding header]** [...]
+
+[Aim for 10 findings. For short documents use fewer; never pad. For very long documents extend beyond 10.]
+
+## {{VOICE_SECTION_HEADER}}
+
+[10–15 verbatim quotes or exact phrases. These are what downstream bots cite. Each quote ends with a source anchor in em-dash format:]
+
+- "[Exact quote]" — [Source anchor, e.g.: Module 3, $100M Leads | Howard Marks memo, Jan 2016 | YouTube: "How to Scale a Service Business", ~2024]
+
+## Cross-Domain Connections
+
+> **Cross-domain:** [Map to the OWNER's specific situation — their actual numbers, portfolio, business, and context. Not generic principles. If you don't know their specifics, note what question would unlock the connection.]
+
+## Related Pages
+- [[wiki-slug]] — [why related, one sentence]
+
+## Pages Created/Updated: (pending Pass B)
+
+## Candidate New Pages (Pass B)
+
+[Exactly 3 proposals. These are the only 3 genuinely novel concepts, frameworks, or entities this source introduces that don't already exist in the slug inventory. If fewer than 3 are genuinely novel, list only those. Do not pad.]
+
+- `wiki/<folder>/<slug>.md` — [one-line description of what this page would cover] — Supporting quote: "[verbatim quote from this source that justifies the page]"
+- `wiki/<folder>/<slug>.md` — [one-line description] — Supporting quote: "[verbatim quote]"
+- `wiki/<folder>/<slug>.md` — [one-line description] — Supporting quote: "[verbatim quote]"
+
+## Gaps
+- GAP: [specific sections not read, data missing, or claims that need verification — be precise, not vague]
+```
+
+## Phase 3 — Bulk Pass A (parallel subagents)
+
+Everything else — assessments, conversational material, transcripts, marketing copy, all remaining files — fires as one bulk parallel pass. Do not sequentialize by content type. Fire 10 subagents per turn via multiple Agent tool calls in a single assistant message; each `run_in_background: true`.
+
+Each subagent prompt is just:
+
+```
+Read briefing /path/to/wiki/_ingest-briefing.md then read /path/to/raw/<file>.txt in full.
+Write ONE file /path/to/wiki/sources/<slug>.md. Return only `CREATED: wiki/sources/<slug>.md`.
+```
+
+Discipline:
+- One source file → one source page. Do NOT create new concept/framework/entity pages in Pass A.
+- Each source page MUST include `## Candidate New Pages (Pass B)` — exactly 3 proposals with supporting quotes.
+- Each source page MUST include `## Pages Created/Updated: (pending Pass B)` as a placeholder.
+- Source pages for assessments/forms must preserve every question, every answer option, every scoring rule verbatim — these cannot be paraphrased.
+- For large files (>2000 lines): use chunked reads with `offset`/`limit`; mark unread sections explicitly with `GAP: lines [N]–[M] not read`.
+- Fire 10 at a time. As 7-8 of 10 complete, fire the next 10. Don't wait for all 10 before launching the next batch.
+
+**Large scientific/academic corpora (50+ papers):** prioritize order within the batch:
+1. Canonical/most-cited sources first
+2. Crisis-era or historically significant clusters
+3. Thematic pairs/sequels
+4. Sources referenced by already-created pages
+5. Chronological fill
+
+## Phase 4 — Pass B Synthesis (single aggregator subagent)
+
+**Gate:** start only after every Phase 3 subagent has returned. This is the most important step.
+
+Fire ONE `general-purpose` subagent to:
+
+1. `grep -A 30 "^## Candidate New Pages" wiki/sources/*.md` — collect every candidate.
+2. Aggregate by proposed slug; dedupe.
+3. Tally votes per slug:
+   ```bash
+   grep -rh "wiki/" wiki/sources/*.md | grep "^\- \`wiki/" | sort | uniq -c | sort -rn
+   ```
+4. Apply the **≥3-source consensus threshold**: candidates proposed by ≥3 source pages get promoted to new pages; 1-2 mentions get logged to `GAPS.md` as deferred.
+5. For each promoted candidate, `grep -rl` the slug across existing pages to confirm it's genuinely new (not already in a different form).
+6. Create promoted pages per the Page Template in CLAUDE.md, using the confidence taxonomy from CLAUDE.md.
+7. Update each source page's `## Pages Created/Updated` section with the actual list of linked new pages.
+8. Append `## Pass 4 Synthesis` to `wiki/log.md` with counts (source pages scanned, candidates found, promoted, deferred).
+
+{{VIEW_EVOLUTION_SECTION}}
+
+## Phase 5 — Duplicates & Conflicts
+
+If Phase 1 inventory or any Pass A subagent flagged near-duplicate source files, fire one subagent per pair to compare (byte size, line count, first-page titles), declare canonical, and log decisions to `log.md`. Do NOT delete files without explicit user approval.
+
+## Phase 6 — Indexes + Lint + Polish
+
+**Gate:** do NOT start Phase 6 until Phase 4 (Pass B Synthesis) is fully complete. Domain indexes built mid-synthesis will be stale.
+
+**Stub cleanup (before indexing):** scan `wiki/` for pages under 600 bytes. For each: if it's a genuine scaffold stub (boilerplate only, no real content extracted), DELETE it rather than leaving it in the wiki. Empty stubs poison RAG retrieval — the system ingests them as if they contain knowledge. Log every deletion in `log.md`. If a stub is a high-traffic target (referenced by 3+ other pages), fill it instead of deleting it.
+
+In parallel — fire one subagent per domain index ({{DOMAIN_COUNT}} subagents):
+
+Each domain-index subagent must:
+1. Read ALL pages, filter by `**Domain(s):**` frontmatter to find pages in this domain.
+2. Rewrite `domain-index-<slug>.md` with:
+   - **Overview paragraph** (4 sentences: scope, key frameworks, what experimental or conceptual lines it includes, what a reader will find)
+   - **Diagnostic Quick Reference table** (minimum 10 rows) — maps specific questions, presentations, or use-cases a downstream bot might receive to the wiki pages that answer them. This is the primary RAG affordance. Format:
+     ```markdown
+     | Presentation / Question | → Pages |
+     |------------------------|---------|
+     | [Specific question a bot would get] | [[page-slug]], [[page-slug]] |
+     ```
+   - **Page listings by folder** — each entry with a one-line description drawn from the page's Overview paragraph
+   - **Cross-domain callout** — note which pages span multiple domains
+
+Then sequentially:
+
+- **Master index rebuild** (`wiki/index.md`) — alphabetical by folder.
+- **GAPS.md populator** — use a shell pipeline (never model-generated):
+  ```bash
+  { echo "# Knowledge Gaps"; echo;
+    for d in concepts entities frameworks protocols stories assessments sources; do
+      [ -d "$d" ] || continue
+      echo "### $d/"
+      grep -rn "GAP:\|CONFLICT:" "$d/" 2>/dev/null | \
+        awk -F: '{print "- " $1 " line " $2 ": " substr($0, index($0,$3))}' | cut -c1-250
+      echo
+    done; } > wiki/GAPS.md
+  ```
+- **Lint pass** — orphans (pages not in any index), broken wikilinks, missing backlinks (sample 20 pages), stub pages (<600 bytes). Append report to `log.md`.
+- **hot.md refresh** — 500-600 word end-of-session summary. For vaults with multiple source traditions (multiple authors, schools of thought), include a **Cross-Domain Convergence table** mapping equivalent concepts across traditions.
+
+## Optional Polish
+
+Run if user asks or if auto-mode is active:
+
+- **Backlink reciprocity pass** — single subagent builds the link graph and appends missing backlinks to Related Pages sections. Expect ~100-300 edits. Use shell to detect missing pairs; only Edit-in-place to add the lines.
+- **Orphan sweep** — pages not in any domain index get added based on their `**Domain(s):**` frontmatter.
+- **High-traffic stub fill** — identify pages referenced in ≥5 other pages that are still stubs. Fill these with real content — they are the dead ends a bot user hits most often.
+
+## Critical Rules (enforce throughout)
+
+- **Never invent.** Flag unknowns with `GAP:`, `CONFLICT:`, or `Assumption:`.
+- **{{VOICE_RULE}}**
+- **Bidirectional links mandatory.** If page A references B, page B must link to A.
+- **Cross-domain callouts** via `> **Cross-domain:** [...]` blocks.
+- **{{ANONYMIZATION_RULE}}**
+- **Never merge distinct concepts.** If the source treats two things as separate, they get separate pages.
+- **Log every operation** in `log.md` so an interrupted session can resume.
+- **Overview sections must lead with the actionable claim**, not philosophical preamble. The first sentence of every Overview should state what the concept IS or DOES, not who said it or why it matters in abstract.
+- **Empty stubs must not exist at Phase 6 start.** A stub page is worse than a broken wikilink for RAG — the system ingests it as content.
+
+## Gotchas
+
+- **Never** fire Phase 6 before Phase 4 finishes — explicit gate.
+- **Never** include project boilerplate in subagent prompts; use the briefing file.
+- **Never** generate >1000 lines of markdown as a subagent's text response — it hits the 32k output cap. Use shell pipelines.
+- **Never** process files serially "just this one time" — that's the trap that kills throughput.
+- **Never** re-ingest a pre-existing complete wiki — create a catalog page and cross-link.
+- **Never** trust a filename's date — verify from internal document content.
+- **Batch size:** 10 parallel subagents per turn. 5 is overly conservative. 20 will bloat notification payloads.
+- **Subagent type:** always `general-purpose` (`Explore` is read-only and can't Write).
+- **Rate limits:** if a subagent returns "rate-limited", verify with `ls` whether the file was written before the limit hit; retry only the ones that didn't complete.
+- **Frontmatter format:** always use YAML fenced with `---`. Do NOT use Obsidian Dataview `::` syntax for confidence or dates — the consuming app's parser expects YAML, and a format mismatch silently defaults every page to the lowest-confidence label.
+
+## Begin
+
+Start with Phase 1. Report inventory and proposed batching before extracting anything.

@@ -1,0 +1,47 @@
+{
+  "_comment": "Tag mapping for migrate_vault_frontmatter.py. Copy this file to tag-map.json (in the same directory) and edit it to fit your vault's taxonomy. The script looks for tag-map.json next to itself; if that file is absent, no tags are added (pages get tagged []).",
+  "_schema": {
+    "domain_map": "Exact match. Key = normalized value from the page's '**Domain(s):**' line (lowercased, spaces->hyphens). Value = tag to apply.",
+    "folder_map": "Fallback used only when the page has NO '**Domain(s):**' line. Key = parent folder name. Value = tag to apply.",
+    "keyword_map": "Substring match against the normalized '**Domain(s):**' value. First hit wins. Key = substring to search for. Value = tag to apply."
+  },
+  "_example_taxonomy_note": "The example values below come from a personal-brain vault about health and identity. Replace with the tag set that fits your vault. For a social-content creator vault you might use: 'hooks', 'frameworks', 'psychology', 'voice', 'topics'.",
+  "domain_map": {
+    "identity": "identity",
+    "metabolic": "metabolic",
+    "masculinity": "masculinity",
+    "business": "business"
+  },
+  "folder_map": {
+    "conditions": "metabolic",
+    "symptoms": "metabolic",
+    "protocols": "metabolic",
+    "supplements": "metabolic",
+    "labs": "metabolic",
+    "science": "metabolic",
+    "nutrition": "metabolic",
+    "phases": "metabolic",
+    "assessments": "metabolic",
+    "nervous-system": "metabolic",
+    "psychology": "identity",
+    "emotional-patterns": "identity",
+    "frameworks": "identity",
+    "coaching": "identity",
+    "stories": "identity",
+    "relationships": "masculinity",
+    "business": "business",
+    "content": "business",
+    "sales": "business"
+  },
+  "keyword_map": {
+    "metabolic": "metabolic",
+    "health": "metabolic",
+    "identity": "identity",
+    "psychology": "identity",
+    "masculin": "masculinity",
+    "relationship": "masculinity",
+    "business": "business",
+    "content": "business",
+    "sales": "business"
+  }
+}

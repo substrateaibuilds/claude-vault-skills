@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Local tag map — see vault-optimize/scripts/.gitignore (defense in depth)
+vault-optimize/scripts/tag-map.json

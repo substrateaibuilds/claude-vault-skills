@@ -1,0 +1,28 @@
+# Corrections Log — {{VAULT_TITLE}}
+
+*Created: {{DATE}}. This file is the authoritative record of claims the wiki previously made that are now known to be wrong. Do NOT delete entries — the historical record matters.*
+
+---
+
+## How to File a Correction
+
+When a downstream bot produces a wrong answer traceable to a wiki page:
+
+1. Identify the specific wiki page that sourced the wrong claim
+2. File an entry below in this format:
+   ```
+   [YYYY-MM-DD] wiki/<path/to/page.md>
+     Wrong: [the incorrect claim]
+     Correct: [the right answer]
+     Source: [what proves the correction — source page, raw file, external reference]
+     Action: [whether the page was updated; what changed]
+   ```
+3. Edit the corrected wiki page with the accurate information
+4. Update the page's `source-date:` frontmatter to today's date
+5. Add a `GAP:` note if the correction revealed a broader gap
+
+---
+
+## Correction Log
+
+_(No corrections filed yet — {{DATE}})_

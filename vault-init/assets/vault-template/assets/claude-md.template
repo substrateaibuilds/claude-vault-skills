@@ -1,0 +1,240 @@
+# {{VAULT_TITLE}} — CLAUDE.md
+
+## What This Project Is
+
+{{VAULT_PURPOSE}}
+
+The vault root / `raw/` folder contains source files ({{RAW_SOURCE_TYPES}}). The `wiki/` folder contains the organized, synthesized knowledge extracted from those sources.
+
+{{DOWNSTREAM_CONSUMERS_SECTION}}
+
+---
+
+## Source Files
+
+Raw, unprocessed source material lives in `raw/`. Do not reference `raw/` directly for answers — that's pre-ingestion material. All authoritative knowledge lives under `wiki/`.
+
+Source types expected: {{RAW_SOURCE_TYPES}}
+
+Each file ingested gets a summary page at `wiki/sources/[slug].md` tracking what was extracted and which wiki pages it populated.
+
+---
+
+## Wiki Folder Structure
+
+```
+wiki/
+  index.md                    — Master alphabetical index of all wiki pages
+  hot.md                      — Recent changes cache (~500 words, updated after each ingest batch)
+  log.md                      — Full operation history; read this to resume an interrupted session
+  GAPS.md                     — Documented knowledge gaps (shell-generated, never model-generated)
+  corrections.md              — Timestamped correction log (wrong answer → correct → source)
+  _ingest-briefing.md         — Shared briefing file written at end of Phase 2; read by all Phase 3 subagents
+{{DOMAIN_INDEX_LIST}}
+
+{{WIKI_SUBFOLDER_LIST}}
+```
+
+---
+
+## Domain Subindex System
+
+{{DOMAIN_COUNT}} domain-specific index file(s). Each lists only the wiki pages relevant to that domain. Pages CAN appear in multiple domain indexes when they span domains.
+
+{{DOMAIN_INDEX_TABLE}}
+
+**Why this matters.** When an AI system or downstream consumer only needs content from one domain, it reads the relevant `domain-index-*.md` instead of the full index. That scopes the context without creating separate vaults. The Diagnostic Quick Reference in each domain index maps specific questions to answers — this is the primary retrieval affordance.
+
+**Cross-domain pages.** A page that bridges two domains should be listed in every domain index where it's relevant. The page itself should have a `> **Cross-domain:** [...]` callout explaining the bridge.
+
+---
+
+## How to Search This Wiki
+
+1. **Full scope query:** Read `wiki/index.md` — alphabetical listing of all pages by folder.
+2. **Domain-scoped query:** Read the relevant `domain-index-*.md` — only pages in that domain, with a Diagnostic Quick Reference.
+3. **Follow links:** Every wiki page has bidirectional links to related pages.
+4. **Cross-domain connections:** Look for `> **Cross-domain:**` callouts — these note when a concept from one domain appears in another.
+5. **Recent context:** `wiki/hot.md` summarizes the latest ingest; read it for warm-up without re-reading the whole index.
+6. **Gaps:** `wiki/GAPS.md` lists everything unresolved or unwritten. Query it to see what the wiki doesn't know.
+
+---
+
+{{CONFIDENCE_TAXONOMY_SECTION}}
+
+---
+
+{{VIEW_EVOLUTION_SECTION}}
+
+---
+
+## How to Ingest New Raw Files
+
+When a new source file is added to `raw/`:
+
+1. Read the file and verify its actual date (do not trust the filename date).
+2. Create a source summary page in `wiki/sources/` using the Source Page Template below.
+3. Extract all knowledge. Create new wiki pages or update existing ones following the Page Template below.
+4. Update `wiki/index.md` with any new pages.
+5. Update the relevant `domain-index-*.md` file(s).
+6. Run stub cleanup: delete any pages under 600 bytes that contain only boilerplate.
+7. Append a log entry to `wiki/log.md`.
+8. Update `wiki/hot.md` with a summary of what changed.
+
+---
+
+## How to Run a Health Check (Lint)
+
+Scan the wiki for:
+- **Orphaned pages** — pages not listed in `index.md` or any domain index
+- **Missing backlinks** — page A references page B but B doesn't link back
+- **Broken cross-references** — wikilinks pointing to pages that don't exist
+- **Domain index gaps** — pages that should be in a domain index but aren't
+- **Stub pages** — pages under 600 bytes; delete if boilerplate-only, fill if high-traffic
+- **GAP markers** — count and list all `GAP:` tags across the wiki
+- **CONFLICT markers** — count and list all `CONFLICT:` tags
+
+---
+
+## Critical Rules
+
+### Never Invent Information
+Only extract what exists in source files. If something is unclear, incomplete, or missing, flag it explicitly:
+- `GAP: [description of what's missing]` — knowledge that should exist but doesn't
+- `CONFLICT: [description]` — contradictions between files
+- `Assumption: [what was assumed and why it might be wrong]`
+
+### {{VOICE_RULE_SECTION}}
+
+### Overview Sections Must Lead With the Claim
+The first sentence of every Overview must state what the concept IS or DOES. Not who said it. Not why it matters philosophically. The bot retrieves the first chunk of each page — make it the answer, not the preamble.
+
+### Cross-Domain Connections Are First-Class Content
+When extracting knowledge, ALWAYS note cross-domain connections. These appear as callout blocks:
+```
+> **Cross-domain:** [How this concept connects to the owner's specific situation, numbers, and context]
+```
+
+### Bidirectional Linking Is Mandatory
+If page A references or depends on page B, page B must link back to A. Run the lint pass to catch drift.
+
+### {{ANONYMIZATION_RULE_SECTION}}
+
+### Never Merge Distinct Concepts
+If a source treats two things as separate, they get separate pages. Don't collapse them even if they seem related — the distinctions are intentional.
+
+### Empty Stubs Must Not Be Ingested
+A stub page (boilerplate header, no real content) is worse than a broken wikilink for RAG retrieval — the system ingests it as if it contains knowledge. Delete stubs before running the Phase 6 ingest sync. High-traffic stubs (referenced by 3+ pages) must be filled with real content, not deleted.
+
+### Frontmatter Must Use YAML Format
+Always fence frontmatter with `---`. Never use Obsidian Dataview `::` syntax for `confidence:`, `source-date:`, or any other field. The consuming app's parser expects YAML — a format mismatch silently defaults every page to the lowest-confidence label, corrupting all bot caveating behavior.
+
+---
+
+## Page Template
+
+Every wiki page should follow this structure. The frontmatter block is required on every concept, framework, and entity page.
+
+```markdown
+---
+confidence: [value from confidence taxonomy above]
+source-date: YYYY-MM-DD
+tags: [domain-slug, domain-slug]
+---
+
+# [Page Title]
+
+**Domain(s):** [all that apply]
+**Folder:** [which wiki subfolder this lives in]
+**Sources:** [wiki-links to source summary pages that contributed to this]
+
+## Overview
+[Lead with the actionable claim — what this concept IS or DOES. Source voice if VOICE_PRESERVATION=yes.]
+
+## [Content sections — varies by page type]
+
+## Conflict
+[Optional — use when the source diverges from mainstream or when two sources disagree. Structure:]
+
+**Mainstream view:** [paraphrase + source]
+**[Source name]'s view:** [paraphrase + [[wiki-link]]]
+**Why it matters:** [practical consequence of the disagreement]
+
+## {{VOICE_SECTION_HEADER}}
+[Exact phrases, analogies, one-liners from the source — 5-15 quotes minimum. Each ends with a source anchor: — [Module 3, Book Title | Author, Year | Platform: Title]]
+
+## Cross-Domain Connections
+> **Cross-domain:** [How this connects to the owner's specific situation — actual numbers, portfolio, business — not abstract principles]
+
+## Related Pages
+- [[link]] — [why it's related, one sentence]
+
+## Gaps
+- GAP: [anything missing that should be here]
+```
+
+---
+
+## Source Page Template
+
+Every `wiki/sources/<slug>.md` page must follow this exact structure:
+
+```markdown
+# Source: [Full Title]
+
+> **Historical context:** [Why this was written and what it responded to. Required for polemical, crisis-era, or time-sensitive documents.]
+
+- **Type:** [memo | letter | transcript | book chapter | course module | etc.]
+- **Content Date:** [Publication date of the original — NOT when you processed it]
+- **Domain(s):** [list]
+- **File path:** `raw/<relative/path>`
+
+## Abstract / Key Question
+[3 sentences: what the document is + what question it answers + why it was written]
+
+## Key Findings
+1. **[Bold header]** [Substantive paragraph with embedded verbatim quotes]
+...
+10. **[Bold header]** [...]
+
+## {{VOICE_SECTION_HEADER}}
+[10–15 verbatim quotes, each ending with: — [Source anchor]]
+
+## Cross-Domain Connections
+> **Cross-domain:** [Personalized to owner's specific situation]
+
+## Related Pages
+- [[wiki-slug]] — [why related]
+
+## Pages Created/Updated: (pending Pass B)
+
+## Candidate New Pages (Pass B)
+- `wiki/<folder>/<slug>.md` — [description] — Supporting quote: "[verbatim]"
+- `wiki/<folder>/<slug>.md` — [description] — Supporting quote: "[verbatim]"
+- `wiki/<folder>/<slug>.md` — [description] — Supporting quote: "[verbatim]"
+
+## Gaps
+- GAP: [specific gaps — unread sections, missing data, unverified claims]
+```
+
+---
+
+## Corrections Log
+
+When a bot produces a wrong answer traceable to a wiki page, file a correction entry in `wiki/corrections.md`:
+
+```
+[YYYY-MM-DD] wiki/<path/to/page.md>
+  Wrong: [the incorrect claim the bot made]
+  Correct: [the right answer]
+  Source: [what proves the correction]
+  Action: [whether the page was updated, and what changed]
+```
+
+Update the corrected page's `source-date:` frontmatter to today's date. One correction properly filed is worth more than ten perfect pages.
+
+---
+
+## Ingest Progress Log
+
+See `wiki/log.md` for the full operation history. If a session is interrupted, read `log.md` to find the last completed batch and resume from there.

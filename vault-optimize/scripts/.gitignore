@@ -1,0 +1,3 @@
+# Local tag mapping — each user maintains their own copy.
+# Ships as `tag-map.example.json`; users copy that to `tag-map.json` and edit.
+tag-map.json

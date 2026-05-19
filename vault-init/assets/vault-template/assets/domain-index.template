@@ -1,0 +1,37 @@
+# Domain Index: {{DOMAIN_NAME}}
+
+*Scope: {{DOMAIN_DESCRIPTION}}. Last updated: {{DATE}} — initial scaffold. Rebuilt after each ingest pass.*
+
+---
+
+## Overview
+
+_(Written during Phase 6 — 4 sentences: scope of the domain, key frameworks it covers, what experimental or conceptual lines it includes, what a downstream AI reading this index will find.)_
+
+---
+
+## Diagnostic Quick Reference
+
+_(Built during Phase 6. Minimum 10 rows. Maps specific questions or presentations a downstream bot might receive to the wiki pages that answer them. This is the primary retrieval affordance — more useful than page listings for scoped queries.)_
+
+| Presentation / Question | → Pages |
+|------------------------|---------|
+| _(pending ingestion)_ | _(pending)_ |
+
+---
+
+## Wiki Pages
+
+_(Organized by subfolder after Phase 6. Each entry: `[[page-slug]] — one-line description`. Description drawn from the page's own Overview paragraph.)_
+
+### _(folder)_/
+
+_(populated during ingestion)_
+
+---
+
+## Cross-Domain Pages
+
+_(Pages that appear in multiple domain indexes — listed here with a note on which other domain they bridge.)_
+
+_(populated during ingestion)_

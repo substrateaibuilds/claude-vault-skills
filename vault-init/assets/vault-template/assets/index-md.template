@@ -1,0 +1,12 @@
+# Wiki Master Index
+
+*Alphabetical by folder. Last updated: {{DATE}} — initial scaffold. Populated during ingestion.*
+
+## Root Wiki Files
+- [[wiki/GAPS.md]] — All documented knowledge gaps (populated during ingestion)
+- [[wiki/hot.md]] — Recent changes cache
+- [[wiki/log.md]] — Full operation history
+
+---
+
+{{FOLDER_SECTIONS}}
