@@ -8,7 +8,7 @@ Four Claude Code skills for turning unstructured source material (PDFs, transcri
 |---|---|
 | `/vault-init` | Scaffold a new Obsidian vault from a 12-question interview. Writes folder structure, `CLAUDE.md`, master index, domain indexes, `INGESTION-PROMPT.md`, and all template files. |
 | `/vault-ingest` | Autonomously process every source file in `raw/` through Phase 1 (scan + PDF extract), Phase 1.5 (briefing write), Phase 3 (parallel source-page generation, 10 subagents per turn), Phase 4 (cross-source synthesis with ≥3-vote promotion threshold), and Phase 6 (index rebuild). |
-| `/vault-optimize` | Audit a vault against a 10-point quality standard and execute remediations in priority order. ≥7.0 = ingest-ready; 10/10 = polished. |
+| `/vault-optimize` | Audit a vault against the evidence-gated four-dimension scorecard (Coverage, Integrity, Epistemics, Currency) and remediate the binding cap. Target every dimension above 20/25; ≥85 is the client-handoff bar. |
 | `/vault-link` | Wire an existing vault into a Claude Code project so the project reads the wiki on demand. |
 
 ## Install (macOS)
@@ -50,7 +50,7 @@ If `tag-map.json` is absent, pages get tagged with an empty `tags: []` field and
 1. `/vault-init` — scaffolds the vault at `~/Obsidian/<vault-name>/`
 2. Drop your source files into `~/Obsidian/<vault-name>/raw/`
 3. `/vault-ingest ~/Obsidian/<vault-name>` — autonomous full ingest
-4. `/vault-optimize ~/Obsidian/<vault-name>` — audit and remediate to 10/10
+4. `/vault-optimize ~/Obsidian/<vault-name>` — audit and remediate the binding cap
 5. `/vault-link ~/Obsidian/<vault-name>` — wire the vault into a chatbot/RAG project
 
 ## License

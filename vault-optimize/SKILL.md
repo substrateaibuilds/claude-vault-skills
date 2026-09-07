@@ -1,30 +1,37 @@
 ---
 name: vault-optimize
-description: Audit an existing Obsidian wiki vault against the 10/10 quality standard, report its score, and execute the remediations needed to reach 10/10. Use when the user wants to "optimize", "upgrade", "health-check", or "bring up to standard" an existing vault. Different from /vault-init (which creates new vaults from scratch).
+description: Audit and remediate an existing Obsidian wiki vault against the evidence-gated four-dimension scorecard. Installs the audit toolkit if missing, brings CLAUDE.md to the contract-enforceable standard, runs the four-script audit, and remediates the binding cap until the vault reaches its target band. Use when the user wants to "optimize", "upgrade", "bring up to standard", "score", or "audit" an existing vault. Replaces the old 10/10 forward-only audit — that methodology gave false confidence because it didn't measure the coverage axis (concepts taught in source material but missing as canonical pages).
 ---
 
 # vault-optimize
 
-Audit an existing vault against the 10-point standard, score it, and execute remediations in priority order. The goal is a vault that produces consistent, high-quality RAG retrieval when consumed by a downstream chatbot or RAG application.
+Raise an existing vault's band on the four-dimension scorecard: Coverage, Integrity, Epistemics, Currency.
 
-## The 10/10 Standard
+**Target the band, not a perfect number.** The scorer was rewritten 2026-09-06 to earn from zero with hard caps, replacing a deduction model whose weights were so small that four production vaults reported 100/100 while printing real deductions on the same screen. Under the current scorer:
 
-| Point | Tier | What it requires |
+| Band | Score | What it means |
 |---|---|---|
-| 1 | Structure | CLAUDE.md has: confidence taxonomy for this vault's archetype, view evolution tracking (if corpus spans 20+ years OR single-author with documented position shifts), YAML page template, 10-findings + 3-candidates source page template |
-| 2 | Structure | `_ingest-briefing.md` exists at wiki/ root (stub accepted if Phase 2 not yet run) |
-| 3 | Structure | `INGESTION-PROMPT.md` exists at vault root with all placeholders rendered, correct source-file paths (NOT defaulting to `raw/` if files live elsewhere), sequential fallback note |
-| 4 | Page quality | All concept/framework/entity pages have YAML frontmatter (`confidence:`, `source-date:`, `tags:`) |
-| 5 | Page quality | All domain indexes have ≥10-row Diagnostic Quick Reference tables |
-| 6 | Page quality | Zero orphaned pages (not in index.md or any domain index); zero stub pages under 600 bytes |
-| 7 | Source coverage | ≥80% of meaningful source files have source pages in wiki/sources/ |
-| 8 | Source coverage | Source pages follow 10-findings + 3-candidates template |
-| 9 | Maintenance | GAPS.md is current, organized by domain, has active entries |
-| 10 | Maintenance | corrections.md has an active correction workflow with at least one entry |
+| Maintained and evidenced | 85–100 | Every dimension 20+/25, no contract failures. The bar for client handoff. |
+| Dependable in the verified scope | 70–84 | Sound, with named gaps. Normal resting state for an active vault. |
+| Working, with gaps | 50–69 | A dimension is below 15/25 and is capping the total. |
+| Foundation | 25–49 | A dimension is below 10/25. |
+| Unproven | 0–24 | Nothing ingested, or nothing measurable. |
 
-## Scoring
+100/100 is not the goal and chasing it produces busywork. Getting every dimension above 20 is the goal.
 
-Score each point 0, 0.5, or 1.0. Total out of 10.
+## Why this skill replaced the old 10/10 audit
+
+The original `/vault-optimize` measured a vault on 10 forward-looking quality points (CLAUDE.md completeness, YAML frontmatter, source coverage %, etc.). It could score 10/10 while missing canonical concepts entirely — because forward-looking audits ask "is what's here in good shape?" not "is what should be here actually here?"
+
+The coverage-axis failure was discovered in the Justin Brain vault on 2026-06-05: two foundational concepts ([[metabolic-damage]] and [[metabolic-adaptation]], explicitly named as the canonical example pair in CLAUDE.md) were missing from the vault for months while the vault scored 10/10. The forensic root causes were:
+
+1. **Promotion logic measured nominations, not mentions** — foundational concepts don't get nominated because they don't feel novel
+2. **Page-internal GAP markers were invisible to GAPS.md rebuilds**
+3. **CLAUDE.md examples were prose-only, never validated as contracts**
+4. **Audit posture was forward-only — never measured "what's missing"**
+5. **Concept salience inverted by familiarity — most-used terms got least attention**
+
+The new methodology — implemented as `_scripts/vault-audit.py` and three sub-audits — measures all four axes. The 100-point score requires hitting all of them.
 
 ## Steps
 
@@ -32,155 +39,203 @@ Score each point 0, 0.5, or 1.0. Total out of 10.
 
 Ask for the vault path if not provided. Confirm it has `wiki/` and `CLAUDE.md`.
 
-### 2. Run all 10 audit checks
+### 2. Install the audit toolkit if missing
 
-**Point 1 — CLAUDE.md completeness:**
-Read CLAUDE.md in full. Check for: confidence taxonomy section, YAML frontmatter in page template (look for `---\nconfidence:`), 10 numbered findings in source template, "Candidate New Pages" section, view evolution section (only required if corpus is 20+ years OR documented major position shifts).
-Score 1.0 if all required elements present; 0.5 if partial; 0.0 if absent.
-
-**Point 2 — _ingest-briefing.md:**
 ```bash
-ls wiki/_ingest-briefing.md 2>/dev/null && echo "EXISTS" || echo "MISSING"
+VAULT=<vault-path>
+if [ ! -f "$VAULT/_scripts/vault-audit.py" ]; then
+  mkdir -p "$VAULT/_scripts"
+  cp ~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/*.py "$VAULT/_scripts/"
+  cp ~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/INSTALL.md "$VAULT/_scripts/"
+  echo "Audit toolkit installed at $VAULT/_scripts/"
+fi
 ```
 
-**Point 3 — INGESTION-PROMPT.md:**
-```bash
-ls INGESTION-PROMPT.md 2>/dev/null && echo "EXISTS" || echo "MISSING"
+### 3. Bring CLAUDE.md to the contract-enforceable standard
+
+Read CLAUDE.md. Check for the three structural elements the audit depends on:
+
+1. **Marker Conventions section** — documents the four marker types (GAP / ACKNOWLEDGED / CONFLICT / ASSUMPTION) and what each one means
+2. **Canonical Example Pairs section** — uses wikilinks, not prose, for any "don't merge X and Y" rules
+3. **Vault Audit reference** — points to `python3 _scripts/vault-audit.py` as the maintenance command
+
+If any are missing, surface them to the user and offer to add them. Use the template at `~/.claude/skills/vault-init/assets/vault-template/assets/claude-md.template` as the source for the new sections.
+
+Convert any prose-only canonical example pairs in the existing CLAUDE.md to wikilink form:
+
 ```
-If exists, check for unrendered placeholders: `grep -c "{{" INGESTION-PROMPT.md`
-Score 1.0 if exists with 0 unrendered placeholders; 0.5 if exists with placeholders; 0.0 if missing.
-
-**Point 4 — YAML frontmatter on pages:**
-Sample 5 pages from concept/framework/entity subfolders (not sources/, not navigation files):
-```bash
-for f in $(find wiki -name "*.md" -not -path "*/sources/*" -not -name "index.md" \
-  -not -name "hot.md" -not -name "log.md" -not -name "GAPS.md" \
-  -not -name "corrections.md" | shuf | head -5); do
-  head -1 "$f"
-done
+Before: Do not combine "metabolic damage" and "metabolic adaptation"
+After:  Do not combine [[wiki/conditions/metabolic-damage]] and [[wiki/conditions/metabolic-adaptation]]
 ```
-Score 1.0 if all 5 start with `---`; 0.5 if some; 0.0 if none.
 
-**Point 5 — Domain index QR tables:**
-For each domain-index-*.md: `grep -c "| Presentation\|| Question\|→ Pages" wiki/domain-index-*.md`
-Score 1.0 if all domain indexes have ≥10 data rows; 0.5 if some; 0.0 if none.
+This makes them enforceable by `validate-claude-contracts.py`.
 
-**Point 6 — Orphaned/stub pages:**
+### 4. Run baseline audit
+
 ```bash
-# Orphan check — uses full wiki-link path pattern to avoid substring false negatives
-find wiki -name "*.md" -not -path "*/sources/*" \
-  -not -name "index.md" -not -name "hot.md" -not -name "log.md" \
-  -not -name "GAPS.md" -not -name "corrections.md" \
+cd "$VAULT" && python3 _scripts/vault-audit.py --json 2>&1 | tail -40
+```
+
+Read `wiki/VAULT-AUDIT.md` for the full scorecard.
+
+Report:
+- Score and band: N / 100 — <band>
+- Per-dimension subtotals (Coverage / Integrity / Epistemics / Currency)
+- **The binding cap and what triggered it** — this is the diagnosis. The lowest dimension is what's holding the score down; everything else is secondary.
+- The sub-5 criteria, worst first (the report's "Top action items" is already sorted this way)
+
+### 5. Confirm before remediating
+
+Ask: "Baseline is N/100 (<band>). The binding constraint is <dimension> at X/25 because <criterion evidence>. Ready to remediate? I'll target that dimension first, then the cheap wins."
+
+Do not promise 100/100. Promise the next band up.
+
+### 6. Execute remediations in priority order
+
+**R1: Stamp missing `last-reviewed::` metadata** (free points)
+
+```bash
+find "$VAULT/wiki" -name "*.md" ! -path "*/sources/*" \
+  -exec grep -L "last-reviewed:" {} + 2>/dev/null \
+  | grep -v "domain-index-\|index.md\|GAPS\|log.md\|hot.md\|STATUS\|corrections\|VAULT-AUDIT\|CONCEPT-COVERAGE\|CLAUDE-CONTRACTS\|GAPS-AUDIT\|_aliases\|_ingest\|ASSESSMENT-ENGINE" \
   | while read f; do
-    name=$(basename "$f" .md)
-    if ! grep -qE "\[\[wiki/[^]]*/${name}(\||\]\])" wiki/index.md; then
-      echo "ORPHAN: $f"
-    fi
+    grep -q "^\*\*Sources:\*\*" "$f" 2>/dev/null \
+      && perl -i -pe 's/^(\*\*Sources:\*\*.*)$/$1\nlast-reviewed:: '"$(date +%Y-%m-%d)"'/' "$f"
   done
-# Stub check
-find wiki -name "*.md" -not -path "*/sources/*" \
-  -not -name "index.md" | while read f; do
-  size=$(wc -c < "$f"); [ "$size" -lt 600 ] && echo "STUB ($size): $f"
-done
 ```
-Score 1.0 if no orphans and no stubs; 0.5 if minor issues; 0.0 if significant orphaned content.
 
-Note: domain-index-*.md files at the wiki root are NOT orphans even if the pattern doesn't match them — they are navigational root files. Only count subfolder pages as orphaned.
+**R2: Convert *documented* CONFLICTs to ACKNOWLEDGED** (only those already resolved in corrections.md)
 
-**Point 7 — Source coverage:**
+A CONFLICT marker means two sources disagree and a downstream bot will produce a wrong answer. ACKNOWLEDGED means someone read it and decided the disagreement is understood and preserved deliberately. Converting one to the other **per file, after reading it** is remediation. Converting them in bulk is score-gaming, and under the rewritten scorer it is gaming the Epistemics dimension specifically.
+
 ```bash
-# Count raw source files (adjust find command for vault-specific raw file location)
-raw_count=$(find . -maxdepth 1 \( -name "*.md" -o -name "*.pdf" -o -name "*.txt" \) \
-  | grep -v "CLAUDE\|README\|INGESTION" | wc -l)
-source_count=$(ls wiki/sources/ | wc -l)
-echo "Coverage: $source_count / $raw_count"
+# List every CONFLICT with its file and line — this is a review queue, not a batch job:
+grep -rn "CONFLICT:" "$VAULT/wiki" 2>/dev/null
 ```
-Score 1.0 if ≥80%; 0.5 if 40-79%; 0.0 if <40%.
 
-**Point 8 — Source page template quality:**
-Sample 3 source pages. Check for: "## Key Findings" with numbered items AND "## Candidate New Pages" section.
-Score 1.0 if all 3 have both; 0.5 if some; 0.0 if neither.
+Read `wiki/corrections.md`. For each CONFLICT, check whether corrections.md already records a resolution. Convert **only those**, one file at a time, with the user's confirmation:
 
-**Point 9 — GAPS.md:**
 ```bash
-ls wiki/GAPS.md 2>/dev/null && grep -c "^- \*\*GAP\|^- GAP:" wiki/GAPS.md || echo "0"
+# Single file, after reading it and confirming corrections.md covers it:
+perl -i -pe 's/\bCONFLICT: /ACKNOWLEDGED: /g; s/\*\*CONFLICT:\*\*/\*\*ACKNOWLEDGED:\*\*/g' "$VAULT/wiki/<folder>/<page>.md"
 ```
-Score 1.0 if exists with ≥5 domain-organized entries; 0.5 if sparse; 0.0 if absent.
 
-**Point 10 — corrections.md:**
+Any CONFLICT with no entry in corrections.md stays a CONFLICT. It is a real finding, and the score is supposed to reflect it.
+
+**R3: Bulk-convert source-limitation GAPs to ACKNOWLEDGED**
+
+GAP markers that describe what the source material couldn't provide aren't action items — they're documented limitations. Common patterns:
+
 ```bash
-ls wiki/corrections.md 2>/dev/null && grep -c "##" wiki/corrections.md || echo "0"
+find "$VAULT/wiki" -name "*.md" ! -path "*/sources/*" -exec perl -i -pe '
+  s/^(\s*-?\s*)GAP: (.*?(not documented|not in source|not captured|no source captures|not specified|not formalized|not yet documented|not yet quantified|not personally tested|in passing|never elaborated|cited by title|referenced but not|cannot be verified|is unknown|whether \w+ is|whether \w+ are|whether \w+ was).*)$/$1ACKNOWLEDGED: $2/i
+' {} +
 ```
-Score 1.0 if present with ≥1 correction entry; 0.5 if present but empty; 0.0 if absent.
 
-### 3. Report audit findings
+**R4: Triage high-frequency concept-coverage candidates** (the big lever)
 
-Present a table with per-point scores and one-line evidence. State the total.
+```bash
+cd "$VAULT" && python3 _scripts/concept-frequency-audit.py
+```
 
-### 4. Confirm before remediating
+Read `wiki/CONCEPT-COVERAGE.md`. The top candidates above the threshold are real action items. For each (in batches of 10-15):
 
-Ask: "Ready to execute remediations? I'll work through them in priority order."
+- **REJECT** if too generic (template artifact, descriptor prose, anonymization residue, marketing term) — add slug to `_scripts/concept-frequency-audit.py` `SLUG_STOPS` with an inline `# REJECT:` rationale comment
+- **ALIAS** if covered by an existing page under a different name — add to `wiki/_aliases.md` and `SLUG_STOPS` with `# ALIAS: <canonical>` rationale
+- **BUILD** if it's a real distinct concept with no existing canonical home — create the page following CLAUDE.md page template; flag ASSUMPTION markers for owner review
 
-### 5. Execute remediations in this fixed order
+Confirm each BUILD with the user before writing.
 
-**R1: CLAUDE.md upgrade** (if Point 1 < 1.0)
-- Determine vault archetype from existing CLAUDE.md content
-- Add missing sections (confidence taxonomy, view evolution if applicable, YAML page template, updated source template)
-- **Replace** the existing page template code block with the YAML version — do not add a second template alongside the old one
-- Preserve all other existing content
+**R5: Fix orphans and index reachability** (usually the binding constraint on Integrity)
 
-**R2: YAML frontmatter migration** (if Point 4 < 1.0)
-- If `~/.claude/skills/vault-optimize/scripts/migrate_vault_frontmatter.py` exists: run it
-- If not: write the script (see vault-init skill assets for reference implementation)
-- Dry-run first, then execute
-- Spot-check 3 pages after execution
+> **Writing a new page LOWERS the score until you index it.** A page that isn't listed in `index.md` or a domain index fails Coverage V4, and one with no inbound links fails Integrity I4 — so three well-researched pages added without wiring dropped `justin-brand-strategy` from 83 to 80 in a real session. This is the scorer working correctly: a page nothing links to is a page a downstream bot will never retrieve, so its knowledge may as well not exist. **Index and cross-link every page in the same batch you create it, and re-run the audit after each batch** — otherwise good work registers as damage and you won't know which change caused it.
 
-**R3: Generate INGESTION-PROMPT.md** (if Point 3 < 1.0)
-- Read `~/.claude/skills/vault-init/assets/vault-template/assets/ingestion-prompt.template`
-- Render ALL placeholders using vault parameters from CLAUDE.md
-- Check vault structure for raw file location — if files are NOT in `raw/`, replace ALL occurrences (≥6) of `raw/` with the correct path
-- Verify: `grep -c "{{" INGESTION-PROMPT.md` must return 0
+Two criteria stall most mature vaults: `I4` (pages with no inbound links) and `V4` (pages not listed in the master or any domain index). Both are cheap to close and both are real retrieval problems — an orphaned page is one a downstream bot will never reach.
 
-**R4: Create _ingest-briefing.md stub** (if Point 2 < 1.0)
-- Write the standard stub content (pre-Phase-2 stub with vault parameters and known conflicts)
+```bash
+# Pages absent from every index:
+cd "$VAULT/wiki" && comm -23 \
+  <(find . -name '*.md' ! -path './sources/*' ! -name '_*' ! -name 'domain-index-*' \
+      ! -name 'index.md' ! -name 'log.md' ! -name 'hot.md' ! -name 'GAPS*' \
+      ! -name 'STATUS.md' ! -name 'corrections.md' ! -name '*-AUDIT.md' \
+      ! -name 'CONCEPT-COVERAGE.md' -exec basename {} .md \; | sort -u) \
+  <(grep -oh '\[\[[^]|#]*' index.md domain-index-*.md 2>/dev/null \
+      | sed 's/\[\[//; s#.*/##; s/\.md$//' | sort -u)
+```
 
-**R5: Domain index QR table repair** (if Point 5 < 1.0)
-- For each domain index missing a ≥10-row QR table, synthesize rows from domain's existing pages
-- Format: `| [Presentation / Question] | → [[page-slug]] |`
+Add each to the right domain index, and give it at least one inbound link from a topically adjacent page. Re-run the audit after the batch.
 
-**R6: Orphaned page cleanup** (if Point 6 < 1.0)
-- Add orphaned pages to index.md and relevant domain indexes
-- Delete stub pages under 600 bytes that are not high-traffic (referenced <3 times)
-- Note: domain-index-*.md files at wiki root are not orphans even if the grep pattern flags them
+**R5b: Re-run and reassess**
 
-**R7–R8: Source coverage scoping** (if Points 7-8 < 1.0)
-- Do NOT run ingestion inline — create `wiki/_ingestion-manifest.md` with source files grouped by priority and estimated sessions
-- The actual ingestion is a separate multi-session effort using INGESTION-PROMPT.md
+```bash
+cd "$VAULT" && python3 _scripts/vault-audit.py --json 2>&1 | tail -40
+```
 
-**R9–R10: GAPS.md / corrections.md** (if Points 9-10 < 1.0)
-- Create GAPS.md from scratch if missing; seed from `GAP:` tags across wiki pages: `grep -rn "GAP:" wiki/ > wiki/GAPS.md`
-- Create corrections.md template if missing
+Read the binding cap again — it moves as dimensions rise. Stop when every dimension is above 20/25, or when the remaining work is genuine content authoring rather than remediation. Do not iterate toward 100; the last few points are almost always busywork.
 
-### 6. Re-score and report final state
+**R6: Final ASSUMPTION marker review**
 
-Re-run checks for all remediated points. Report new score and what remains.
+The audit doesn't penalize ASSUMPTION markers (they're synthesis decisions awaiting owner ratification). But they ARE action items for the owner. Surface them:
 
-### 7. State next steps
+```bash
+grep -rn "ASSUMPTION:" "$VAULT/wiki" ! -path "*/sources/*" 2>/dev/null
+```
 
-Always include:
-- New score (X/10)
-- Points still below 1.0 and specific action to fix each
-- Whether the vault is ready for platform ingestion (score ≥ 7.0 = ingest-ready)
-- Reference to INGESTION-PROMPT.md for source coverage expansion sessions
+Present each to the user with the question: "Ratify (remove marker, content stands) or correct (revise the synthesis)?"
 
-## What vault-optimize does NOT do
+### 7. Re-run and report the final band
 
-- Run the actual ingestion sessions (Points 7-8) — those require separate Claude sessions using INGESTION-PROMPT.md
-- Build platform code or new bots — separate task
-- Physically merge vaults — never; serve from same platform via domain retrieval
-- Overwrite existing page content — only adds infrastructure (frontmatter, files)
+```bash
+cd "$VAULT" && python3 _scripts/vault-audit.py --json 2>&1 | tail -40
+```
+
+Report the score, the band, the per-dimension subtotals, and any cap still binding. List the remaining sub-5 criteria and what would close each one — honestly, including the ones that need content work rather than remediation.
+
+**Do not claim the vault is "complete" or "100%".** State what was measured and what was not. The score covers mechanically checkable properties: coverage against the corpus, link and contract integrity, metadata and conflict discipline. It says nothing about whether the content is *correct*.
+
+### 8. Log the optimization pass
+
+Append to `wiki/log.md`:
+
+```markdown
+## YYYY-MM-DD — /vault-optimize pass
+
+**Status:** Score: N / 100 — <band>  (scorer: evidence-gated v2)
+**Dimensions:** Coverage N/25 · Integrity N/25 · Epistemics N/25 · Currency N/25 or n/a
+**Binding cap at close:** <cap and reason, or "none">
+
+Score path: [baseline] → [after R1] → ... → [final]
+
+Toolkit installation: [installed | already present]
+CLAUDE.md upgrades: [list of sections added]
+SLUG_STOPS added: N triage decisions
+Aliases registered: N canonical-page mappings
+Pages built: N (list with brief description)
+Metadata stamps applied: N pages
+GAP → ACKNOWLEDGED conversions: N
+CONFLICT → ACKNOWLEDGED conversions: N
+Open ASSUMPTION markers: N (for owner review)
+```
+
+### 9. Report final state
+
+Print to the user:
+- Final score and band, per-dimension subtotals, and any cap still binding
+- Toolkit installed at `_scripts/`
+- Reference: `python3 _scripts/vault-audit.py` to maintain the score
+- Any open ASSUMPTION markers needing owner review
+- Recommendation: run audit after every ingest pass and at least quarterly
+
+## What this skill does NOT do
+
+- Skip the audit gate to "save time" — the score IS the validation
+- Auto-ratify ASSUMPTION markers without owner input — those are synthesis decisions the owner must confirm
+- Modify source files in `raw/` — only touches wiki/, CLAUDE.md, _scripts/, and meta files
+- Build concept pages without confirming with the user — every new page is a knowledge artifact that becomes part of the canonical methodology
 
 ## Related skills
 
-- `/vault-init` — creates new vaults from scratch with correct structure
-- `superpowers:subagent-driven-development` — for executing optimization in parallel when multiple remediations apply
+- `/vault-init` — creates new vaults with the toolkit pre-installed (this skill is the retrofit version)
+- `/vault-ingest` — runs the audit automatically as Phase 7; remediates anything below 85 before claiming complete
+- `/vault-link` — verifies source vault score before wiring a project to consume it
+- `/vault-audit` — single-shot audit (no remediation); useful for quick health-check between ingest passes

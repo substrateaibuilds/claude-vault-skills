@@ -5,7 +5,7 @@ description: Create a new structured Obsidian knowledge vault for any topic — 
 
 # vault-init
 
-Scaffold a new Obsidian vault at `~/Documents/Obsidian/<VAULT_NAME>/` using the reusable template at `~/.claude/skills/vault-init/assets/vault-template/`. All template content lives in that visible folder — this skill is the glue that interviews the user, renders placeholders, and writes the vault.
+Scaffold a new Obsidian vault at `~/Obsidian/<VAULT_NAME>/` using the reusable template at `~/.claude/skills/vault-init/assets/vault-template/`. All template content lives in that visible folder — this skill is the glue that interviews the user, renders placeholders, and writes the vault.
 
 ## Steps
 
@@ -29,6 +29,10 @@ Required parameters:
   - `contested-by-default` — source works against mainstream consensus; assume claims are contested unless proven across 3+ independent sources (use for heterodox scientists, unconventional thinkers)
   - `practical-by-default` — source is operational/coaching; claims are evaluated on utility not truth-value (use for coaching methodology, psychological frameworks, personal brain)
 - `MULTI_DECADE_CORPUS` — `yes` or `no`. Does this vault cover a single author's work spanning 20+ years? (yes = triggers view-evolution tracking)
+- `OPERATIONAL` — `yes` or `no`. Will this vault reach **live systems** (CRM, calendar, Slack, a database, an analytics API) in addition to ingested source material?
+  - `no` (default, and correct for most vaults) — a static knowledge corpus. Expert wikis, research vaults, course rips, coaching corpora. The audit's Currency dimension is not scored and the vault is graded over the other three, scaled to 100.
+  - `yes` — an operational brain whose value depends on current data. Business brains, client-ops brains. Scaffolds `connections.md` and `decisions/log.md`, and enables Currency scoring.
+  - If `no`, also collect `OPERATIONAL_REASON` — one sentence on why live data doesn't apply. It prints in every audit report, so the exclusion is stated rather than silent. Default: *"Static knowledge corpus. Content comes from ingested source material, not live systems."*
 
 ### 2. Confirm
 
@@ -45,13 +49,13 @@ Default wiki/ subfolders per archetype:
 
 ### 4. Safety check
 
-Before creating anything, test if `~/Documents/Obsidian/<VAULT_NAME>/` already exists. If yes, stop and ask the user whether to abort, pick a new name, or overwrite. Never silently overwrite.
+Before creating anything, test if `~/Obsidian/<VAULT_NAME>/` already exists. If yes, stop and ask the user whether to abort, pick a new name, or overwrite. Never silently overwrite.
 
 ### 5. Scaffold directories
 
 ```bash
-VAULT=~/Documents/Obsidian/<VAULT_NAME>
-mkdir -p "$VAULT"/{raw,wiki,.obsidian}
+VAULT=~/Obsidian/<VAULT_NAME>
+mkdir -p "$VAULT"/{raw,wiki,.obsidian,_scripts}
 mkdir -p "$VAULT"/wiki/<each-archetype-folder>
 ```
 
@@ -60,6 +64,30 @@ mkdir -p "$VAULT"/wiki/<each-archetype-folder>
 ```bash
 cp ~/.claude/skills/vault-init/assets/vault-template/assets/obsidian-config/*.json "$VAULT"/.obsidian/
 ```
+
+### 6a. Install the vault audit toolkit
+
+This is non-negotiable. Every vault ships with the four-script audit toolkit so the coverage-axis failure mode (concepts mentioned across many sources but missing as canonical pages) is structurally impossible.
+
+```bash
+cp ~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/*.py "$VAULT/_scripts/"
+cp ~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/INSTALL.md "$VAULT/_scripts/"
+cp ~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/audit-config.json "$VAULT/_scripts/"
+```
+
+Then write `$VAULT/_scripts/audit-config.json` with this vault's answers:
+
+```json
+{
+  "operational": <true if OPERATIONAL = yes, else false>,
+  "operational_reason": "<OPERATIONAL_REASON — required when operational is false>",
+  "high_freq_threshold": 15,
+  "freshness_days": 90,
+  "stub_bytes": 600
+}
+```
+
+After scaffolding, the vault should be able to run `python3 _scripts/vault-audit.py` and produce a baseline scorecard. **Expect a score near 0 — that is correct.** The scorer earns points from measured evidence and gates criteria with no evidence base to 0, so a vault with no content is `Unproven`. A fresh scaffold that scored well would mean the scorer was broken. Verify this in step 9.
 
 ### 7. Render and write template files
 
@@ -73,8 +101,16 @@ For each `.template` file in `~/.claude/skills/vault-init/assets/vault-template/
 | `log-md.template` | `$VAULT/wiki/log.md` |
 | `gaps-md.template` | `$VAULT/wiki/GAPS.md` |
 | `corrections-md.template` | `$VAULT/wiki/corrections.md` |
+| `aliases-md.template` | `$VAULT/wiki/_aliases.md` |
 | `domain-index.template` | `$VAULT/wiki/domain-index-<slug>.md` (one per domain) |
 | `ingestion-prompt.template` | `$VAULT/INGESTION-PROMPT.md` |
+
+**Only when `OPERATIONAL = yes`** — skip both otherwise. An unused `connections.md` full of permanent placeholder rows is noise that every future audit has to explain away, and an empty `decisions/` folder is exactly the kind of pre-created structure that rots:
+
+| Template | Destination |
+|---|---|
+| `connections-md.template` | `$VAULT/connections.md` |
+| `decisions-log-md.template` | `$VAULT/decisions/log.md` (`mkdir -p "$VAULT/decisions"` first) |
 
 Also create this stub file directly (no template needed — its content is generated dynamically during Phase 2):
 
@@ -94,6 +130,7 @@ EOF
 
 Direct substitutions (straight replacement):
 - `{{VAULT_NAME}}`, `{{VAULT_TITLE}}`, `{{OWNER_NAME}}`, `{{VAULT_PURPOSE}}`, `{{RAW_SOURCE_TYPES}}` (render as comma-joined list)
+- `{{ARCHETYPE}}` — the selected archetype slug (used by `decisions-log-md.template`)
 - `{{DATE}}` — today's date in `YYYY-MM-DD` format
 - `{{DOMAIN_COUNT}}` — integer count of domains
 
@@ -238,16 +275,29 @@ Toggled substitutions:
   **Claude Max / no background subagents:** If you are running under Claude Max or a tier that does not support `run_in_background: true`, fall back to the sequential pattern: Read 3-4 source files in main context → write 3-4 source pages → continue until complete. This is ~5× slower but produces identical quality. Never mix parallel and sequential mid-batch.
   ```
 
-### 9. Report
+### 9. Verify the audit toolkit + report
+
+Run the audit on the freshly-scaffolded vault to verify the toolkit is installed correctly:
+
+```bash
+cd "$VAULT" && python3 _scripts/vault-audit.py 2>&1 | tail -12
+```
+
+Expected output for a freshly-scaffolded vault: **0 / 100 — Unproven**, with no script errors. That is a passing installation check, not a problem. If the score comes back high, the scorer's evidence gating is broken — investigate rather than celebrating.
+
+If `vault-audit.py` fails with import or path errors, the toolkit installation is broken — investigate before reporting success.
 
 Print a summary to the user:
 - Vault path
-- Files written (count + list)
+- Files written (count + list, including `_scripts/`)
+- Baseline audit score — say plainly that 0/Unproven is expected for an empty vault
+- Whether the vault is operational (Currency scored) or a static corpus (Currency `n/a`)
 - Next steps:
-  1. Drop raw source files into `$VAULT/raw/`
+  1. Add source material — drop files into `$VAULT/raw/` (or the vault root), **or** run `/vault-interview` if the knowledge is still in someone's head
   2. `cd $VAULT && claude`
-  3. Paste the contents of `INGESTION-PROMPT.md` as the first message
-  4. Later, invoke `/vault-link` to connect a project to this vault
+  3. Run `/vault-ingest`, or paste `INGESTION-PROMPT.md` as the first message
+  4. After ingest, run `/vault-audit`. A first ingest typically lands in **Working, with gaps (50–69)** or **Dependable (70–84)**. Every dimension above 20/25 is the goal; 100/100 is not, and chasing it produces busywork.
+  5. Later, invoke `/vault-link` to connect a project to this vault
 
 ## Safety
 

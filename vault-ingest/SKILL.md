@@ -22,7 +22,7 @@ Run a full autonomous ingestion of all unprocessed source files in an Obsidian v
 
 `/vault-ingest [vault-path]`
 
-- `vault-path` — absolute path to vault root (e.g. `~/Documents/Obsidian/coffee-brewing-research`)
+- `vault-path` — absolute path to vault root (e.g. `~/Obsidian/coffee-brewing-research`)
 - If omitted, ask the user
 
 ## Steps
@@ -311,9 +311,11 @@ Append after each batch:
 - Results: [N] CREATED, [N] FAILED
 ```
 
-### Phase 4 — Pass B Synthesis
+### Phase 4 — Pass B Synthesis (Nomination-based + Frequency-based)
 
 **Gate:** Start only after ALL Phase 3 batches have completed.
+
+**Critical:** Phase 4 uses TWO promotion signals, not one. The original ingest skill used only nomination-based promotion (counts entries in the "Candidate New Pages" sections of source pages). That logic misses *foundational* concepts that get mentioned heavily across source pages but rarely nominated — because the most-used concepts in a corpus don't feel like discoveries to the source-summary writers. The frequency-based check catches them.
 
 Fire ONE `general-purpose` subagent:
 
@@ -321,7 +323,9 @@ Fire ONE `general-purpose` subagent:
 Read this briefing first (it contains the Page Template and confidence taxonomy you need):
 [VAULT_PATH]/wiki/_ingest-briefing.md
 
-You are running Pass B Synthesis for [VAULT_TITLE].
+You are running Pass B Synthesis for [VAULT_TITLE]. Promotion uses TWO signals.
+
+=== SIGNAL 1: Nomination-based (Candidate New Pages sections) ===
 
 1. Run: grep -A 5 "^## Candidate New Pages" [VAULT_PATH]/wiki/sources/*.md
    Collect every proposed new page slug.
@@ -332,22 +336,38 @@ You are running Pass B Synthesis for [VAULT_TITLE].
      | sort | uniq -c | sort -rn
 
 3. Promote any slug proposed by ≥3 different source pages.
-   For each promoted slug:
-   - Confirm it doesn't already exist: ls [VAULT_PATH]/wiki/<folder>/<slug>.md
-   - If genuinely new: create it per the Page Template from the briefing
-   - Confidence: use the vault default from the briefing's Confidence Taxonomy
 
-4. For each promoted page: update the source pages that proposed it — fill their
+=== SIGNAL 2: Frequency-based (concept-frequency audit) ===
+
+4. Run the concept-frequency audit to find concepts mentioned in many source pages but missing as wiki pages:
+   python3 [VAULT_PATH]/_scripts/concept-frequency-audit.py
+
+5. Read [VAULT_PATH]/wiki/CONCEPT-COVERAGE.md. Take the top 10 candidates by mention count. Each is a real coverage gap that nomination-based promotion missed.
+
+6. For each candidate in the top 10:
+   - Read 2-3 of the highest-density source pages that mention it
+   - Decide: BUILD (real concept, no existing page covers it), ALIAS (existing page covers it under different name; add to wiki/_aliases.md and SLUG_STOPS), or REJECT (too generic or template artifact; add to SLUG_STOPS only)
+   - If BUILD: create the page per the Page Template from the briefing
+
+=== APPLY ===
+
+7. For each promoted page (from either signal):
+   - Confirm it doesn't already exist
+   - Create it per the Page Template; use the vault default confidence from the briefing
+   - Mark ASSUMPTION markers on any synthesis decisions for owner review
+
+8. For each promoted page: update the source pages that proposed it — fill their
    "## Pages Created/Updated" section with [[slug]] links.
 
-5. Append to [VAULT_PATH]/wiki/log.md:
+9. Append to [VAULT_PATH]/wiki/log.md:
    ## Phase 4 Synthesis — [date]
    - Source pages scanned: N
-   - Candidates found: N
-   - Promoted (≥3 sources): N pages created
-   - Deferred (<3 sources): logged to GAPS.md
+   - Nomination-based candidates: N proposed, N promoted (≥3 sources)
+   - Frequency-based candidates: N surfaced (≥5 mentions), N built, N aliased, N rejected
+   - Total new pages: N
+   - Open ASSUMPTION markers: N (flagged for owner review)
 
-Return: a terse summary — "Phase 4 complete: N pages promoted, N deferred"
+Return: a terse summary — "Phase 4 complete: N pages promoted (nomination), N pages built (frequency), N deferred"
 ```
 
 ### Phase 6 — Index rebuild and cleanup
@@ -397,23 +417,57 @@ Write a 400-500 word summary to `wiki/hot.md`:
 - Domains with most new source coverage
 - Top 3 gaps surfaced
 
+### Phase 7 — Mandatory audit gate
+
+**This phase is non-negotiable.** Ingest is not "complete" until the vault audit passes. This catches the failure mode where Phase 4 promotion logic missed concepts that should have become pages, and surfaces them before they ship.
+
+Run the full audit and capture the machine-readable summary:
+
+```bash
+cd "$VAULT" && python3 _scripts/vault-audit.py --json 2>&1 | tail -40
+```
+
+**Thresholds retuned 2026-09-06** for the rewritten scorer (`_scripts/vault-audit.py`). It earns from zero across four dimensions with hard caps, replacing the old start-at-100 deduction model whose weights were so small that four production vaults reported 100/100 while printing real deductions. Old and new scores are not comparable — a vault that scored 100 before typically lands in the 70s–80s now. **Do not read a lower number as regression.** If the vault still has the old scorer, install the current one from `~/.claude/skills/vault-init/assets/vault-template/assets/_scripts/` before gating.
+
+**Read the binding cap first, not just the score.** The JSON `caps` array names what is actually holding the score down. Remediate *that*, not whatever is easiest.
+
+**Decision tree:**
+
+- **Score ≥ 85 (Maintained and evidenced)** — proceed to completion report. Note remaining sub-5 criteria for owner triage.
+
+- **Score 70–84 (Dependable)** — the expected landing zone for a fresh ingest. Run the safe remediations below, re-run the audit, then proceed and report the final number plus what remains:
+  - Stamp pages missing `last-reviewed::` (lifts Epistemics E2)
+  - Convert documented CONFLICTs (those already in `corrections.md`) to ACKNOWLEDGED (E3)
+  - Convert source-limitation GAPs (text matches "not documented", "not captured", "not in source", "no source captures", "Whether X is unknown") to ACKNOWLEDGED (E4)
+  - Add newly built pages to `index.md` and the relevant `domain-index-*.md` (Coverage V4). **An unindexed new page lowers the score** — it fails V4 and, with no inbound links, Integrity I4 too. Three good pages added without wiring dropped a real vault from 83 to 80. Index and cross-link in the same batch you create, and re-run the audit per batch so you can tell which change moved the number.
+  - Add inbound links to orphaned pages from their topic neighbours (Integrity I4) — orphans are the single most common reason Integrity stalls at 21
+
+- **Score 50–69 (Working, with gaps)** — run the same remediations, then re-run. If still below 70, **surface to owner**. Name the binding cap and the dimension that triggered it, plus the top 10 candidates from `CONCEPT-COVERAGE.md` for build/alias/reject triage. Do not claim "ingest complete."
+
+- **Score < 50** — stop. Something structural is wrong: the toolkit isn't installed, CLAUDE.md contracts are broken, `sources/` is empty, or Phase 3 didn't write pages. Report the failure honestly; do not remediate around it.
+
+**Never** raise a score by loosening `_scripts/audit-config.json` (widening `freshness_days`, dropping `high_freq_threshold`, or flipping `operational` to `false` to dodge Currency). Config changes are scope declarations, not score levers. If one is genuinely warranted, make it in a separate step, state the reason, and re-baseline.
+
 ### Completion Report
 
-After all phases complete, report:
+After Phase 7 audit passes, report:
 
 ```
 ## Vault Ingest Complete — [VAULT_TITLE]
 
 **Source pages created:** N / N queued
-**Phase 4 promotions:** N new concept/framework pages
+**Phase 4 promotions:** N (nomination-based) + N (frequency-based) = N new concept pages
 **Failed files:** N (list below if any)
-**Estimated coverage:** N% (new source pages / total source files)
+**Estimated source coverage:** N% (new source pages / total source files)
+
+**Vault audit score (Phase 7):** N / 100
+**Open ASSUMPTION markers:** N (owner review needed)
+**Top 5 high-freq concept candidates above threshold:** (from CONCEPT-COVERAGE.md, for next triage pass)
 
 **Failed files (retry manually or re-run /vault-ingest):**
 - [filename] — [reason]
 
-**Score improvement:** [old %] → [new %] source coverage
-Next: run /vault-optimize to re-audit the vault's updated score.
+Next: review ASSUMPTION markers and triage the CONCEPT-COVERAGE candidates. Run /vault-optimize to work the binding cap — target every dimension above 20/25, not a perfect score.
 ```
 
 ## Failure handling
