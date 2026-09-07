@@ -47,11 +47,11 @@ If `tag-map.json` is absent, pages get tagged with an empty `tags: []` field and
 
 ## Typical workflow
 
-1. `/vault-init` — scaffolds the vault at `~/Documents/Obsidian/<vault-name>/`
-2. Drop your source files into `~/Documents/Obsidian/<vault-name>/raw/`
-3. `/vault-ingest ~/Documents/Obsidian/<vault-name>` — autonomous full ingest
-4. `/vault-optimize ~/Documents/Obsidian/<vault-name>` — audit and remediate to 10/10
-5. `/vault-link ~/Documents/Obsidian/<vault-name>` — wire the vault into a chatbot/RAG project
+1. `/vault-init` — scaffolds the vault at `~/Obsidian/<vault-name>/`
+2. Drop your source files into `~/Obsidian/<vault-name>/raw/`
+3. `/vault-ingest ~/Obsidian/<vault-name>` — autonomous full ingest
+4. `/vault-optimize ~/Obsidian/<vault-name>` — audit and remediate to 10/10
+5. `/vault-link ~/Obsidian/<vault-name>` — wire the vault into a chatbot/RAG project
 
 ## License
 

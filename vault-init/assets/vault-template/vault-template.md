@@ -12,7 +12,7 @@ Answer these before starting. These thread through every file the template write
 
 | Key | Example | Notes |
 |---|---|---|
-| `VAULT_NAME` | `coffee-brewing-research` | Directory under `~/Documents/Obsidian/`; kebab-case |
+| `VAULT_NAME` | `coffee-brewing-research` | Directory under `~/Obsidian/`; kebab-case |
 | `VAULT_TITLE` | Coffee Brewing Research Wiki | Human-readable title |
 | `OWNER_NAME` | Jane Doe | Whose brain / what entity this serves; shown in CLAUDE.md + ingestion prompt |
 | `VAULT_PURPOSE` | 1–3 sentences explaining what this vault is and why it exists | Goes into CLAUDE.md verbatim |
@@ -35,7 +35,7 @@ Answer these before starting. These thread through every file the template write
 ## Step 2 — Scaffold Folders
 
 ```bash
-VAULT=~/Documents/Obsidian/{{VAULT_NAME}}
+VAULT=~/Obsidian/{{VAULT_NAME}}
 mkdir -p "$VAULT"/{raw,wiki,.obsidian}
 
 # Archetype subfolders (example for research-wiki):
@@ -146,10 +146,10 @@ Two options:
 
 ## Knowledge Vault
 
-- **Vault:** `~/Documents/Obsidian/{{VAULT_NAME}}`
-- **Master index:** `~/Documents/Obsidian/{{VAULT_NAME}}/wiki/index.md`
-- **Primary domain index:** `~/Documents/Obsidian/{{VAULT_NAME}}/wiki/domain-index-{{DOMAIN}}.md`
-- **Recent changes cache:** `~/Documents/Obsidian/{{VAULT_NAME}}/wiki/hot.md`
+- **Vault:** `~/Obsidian/{{VAULT_NAME}}`
+- **Master index:** `~/Obsidian/{{VAULT_NAME}}/wiki/index.md`
+- **Primary domain index:** `~/Obsidian/{{VAULT_NAME}}/wiki/domain-index-{{DOMAIN}}.md`
+- **Recent changes cache:** `~/Obsidian/{{VAULT_NAME}}/wiki/hot.md`
 
 **Usage:** for questions about {{TOPIC}}, read the domain-index first, then follow wiki-links to specific pages. Read `hot.md` for recent changes before full index re-reads. Do not scan `raw/` — that's unprocessed source material.
 ```
