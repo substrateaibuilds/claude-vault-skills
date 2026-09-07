@@ -1,0 +1,39 @@
+# Connections — {{VAULT_TITLE}}
+
+Registry of every live system this vault reaches. A vault built only from ingested source material knows what *was* true when the sources were written. This file is what lets it also know what is true **now**.
+
+Scored by the Currency dimension in `_scripts/vault-audit.py` (criteria U1/U2). Only rows naming a real mechanism count as wired — placeholder rows are declared intent, not reach.
+
+## Registry
+
+| # | Domain | System | Mechanism | Auth | Refresh interval | Last checked |
+|---|--------|--------|-----------|------|------------------|--------------|
+| 1 | Revenue / financials | _not yet connected_ | — | — | — | — |
+| 2 | Customer / client records | _not yet connected_ | — | — | — | — |
+| 3 | Calendar | _not yet connected_ | — | — | — | — |
+| 4 | Communication | _not yet connected_ | — | — | — | — |
+| 5 | Project / task tracking | _not yet connected_ | — | — | — | — |
+| 6 | Meeting intelligence | _not yet connected_ | — | — | — | — |
+| 7 | Knowledge / files | _not yet connected_ | — | — | — | — |
+
+Delete rows that don't apply to this vault rather than leaving them as permanent placeholders — an irrelevant domain scored as "missing" is a false finding. Note the reason in **Out of scope** below.
+
+**Mechanism values:** `mcp` · `script` (in `_scripts/`) · `export` (CSV/JSON dump) · `api` (`.env` key + a `wiki/sources/{tool}-api.md` guide) · `manual` (someone pastes it) · `not yet connected`
+
+**Last checked** must be a real `YYYY-MM-DD` on which a read actually succeeded. The audit reads this column literally. Do not backdate a row to lift the score — a stale row reported honestly is worth more than a fresh-looking lie, because the whole point of this file is knowing when the vault's live view has gone dark.
+
+## Out of scope
+
+| Domain | Why it doesn't apply |
+|--------|----------------------|
+| _example: Revenue_ | _This is a research corpus about an external author; there is no revenue surface to connect._ |
+
+## Freshness contract
+
+- **Changing facts** (metrics, headcount, pricing, status) carry an as-of date on the page that states them, and name the system of record here.
+- **Stable context** (methodology, frameworks, definitions) needs no as-of date — it's what the corpus is for.
+- When a read fails, **say so on the page**. Never let an unlabelled stale number stand in for a current one; a downstream bot cannot tell the difference and will present it as current.
+
+## Per-system notes
+
+When a system is wired, write `wiki/sources/{tool}-api.md` capturing endpoints, auth flow, and the two or three queries actually used. Researched once, saved forever — and it keeps the next session from re-deriving it.

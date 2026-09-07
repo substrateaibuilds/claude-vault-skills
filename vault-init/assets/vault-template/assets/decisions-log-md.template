@@ -1,0 +1,47 @@
+# Decisions Log — {{VAULT_TITLE}}
+
+Append-only record of decisions and the reasoning behind them. Newest at the top.
+
+**Why this is separate from the other logs:**
+
+| File | Holds |
+|------|-------|
+| `wiki/log.md` | What the *pipeline* did — ingest passes, batches, index rebuilds |
+| `wiki/corrections.md` | Facts that were **wrong** and are now right |
+| `decisions/log.md` | Choices that were **made**, and why — where a different call was available |
+
+A correction says the vault was mistaken. A decision says the vault chose. Collapsing them loses the reasoning, and reasoning is the part that's expensive to reconstruct six months later when the conditions have changed and someone asks "why is it like this?"
+
+## What earns an entry
+
+- A triage call with a real alternative — building a concept page vs. aliasing it, splitting one page into two, rejecting a high-frequency candidate
+- A scope boundary — what this vault deliberately does *not* cover, and where that material lives instead
+- A taxonomy call — why a claim is `contested` rather than `practical`, when the choice was arguable
+- An architecture change — a new domain index, a folder split, a confidence-default change
+- Anything a future session might otherwise undo without knowing the cost
+
+Routine work does not earn an entry. If there was no alternative worth naming, it belongs in `log.md`.
+
+## Entry format
+
+```markdown
+## YYYY-MM-DD — <short title>
+
+**Decision:** <what was decided, one sentence>
+**Alternatives considered:** <what else was on the table>
+**Reasoning:** <why this one — the part that's expensive to reconstruct>
+**Revisit if:** <the condition that should reopen this, stated concretely enough to notice>
+**Decided by:** <who>
+```
+
+`Revisit if:` is the field that keeps this from becoming an archive nobody reads. Write a condition someone could actually observe — "if a second client asks for X", "if this domain passes 40 pages", "if the source author publishes after 2027" — not "if circumstances change."
+
+---
+
+## YYYY-MM-DD — Vault created
+
+**Decision:** Scaffolded `{{VAULT_NAME}}` as a `{{ARCHETYPE}}` vault covering {{DOMAIN_COUNT}} domain(s).
+**Alternatives considered:** Folding this material into an existing vault.
+**Reasoning:** {{VAULT_PURPOSE}}
+**Revisit if:** The corpus stays under ~10 source files after two ingest passes — that's a sign it should have been a domain inside a larger vault rather than its own.
+**Decided by:** {{OWNER_NAME}}

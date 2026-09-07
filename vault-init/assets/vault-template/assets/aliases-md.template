@@ -1,0 +1,29 @@
+# Concept Aliases
+
+Canonical concept pages with their known aliases. When a downstream AI sees an aliased term, it should resolve to the canonical page. When the concept-frequency audit surfaces an alias, the alias is added to `SLUG_STOPS` to avoid resurfacing.
+
+## How to add an alias
+
+When triaging `wiki/CONCEPT-COVERAGE.md`, if a candidate is genuinely covered by an existing page under a different name:
+
+1. Add a row to the alias table below — canonical page on the left, alias on the right.
+2. Add the alias slug to `SLUG_STOPS` in `_scripts/concept-frequency-audit.py` with a `# ALIAS: <canonical>` comment.
+3. Rerun the audit.
+
+## Active aliases
+
+| Canonical page | Alias surfaces as | First triaged |
+|---|---|---|
+| _(none yet — populated during triage)_ | | |
+
+## Aliasing principle
+
+Aliases are accepted when:
+- The canonical page already covers the concept under a different name (verified by reading the page).
+- {{OWNER_NAME}} uses both terms interchangeably in source material (not as a distinction).
+- Forcing a new page would create redundancy, not clarity.
+
+Aliases are NOT accepted when:
+- The canonical page only mentions the concept in passing.
+- {{OWNER_NAME}} treats the alias and the canonical as distinct concepts (then build a separate page — the "Never Merge Distinct Concepts" rule applies).
+- The alias has its own downstream protocol implications.

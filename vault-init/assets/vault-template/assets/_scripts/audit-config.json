@@ -1,0 +1,7 @@
+{
+  "operational": false,
+  "operational_reason": "Static knowledge corpus. Content comes from ingested source material, not live systems, so the Currency dimension does not apply.",
+  "high_freq_threshold": 15,
+  "freshness_days": 90,
+  "stub_bytes": 600
+}
