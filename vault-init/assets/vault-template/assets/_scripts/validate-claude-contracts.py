@@ -24,6 +24,32 @@ WIKILINK = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]+?)?\]\]")
 BACKTICK_PATH = re.compile(r"`(wiki/[a-zA-Z0-9_/-]+\.md)`")
 EXPLICIT_CONTRACT = re.compile(r"<!--\s*contract:\s*(wiki/[a-zA-Z0-9_/-]+\.md)\s*-->")
 
+# Generated audit reports are not page contracts. CLAUDE.md legitimately points
+# at them as outputs ("Output: `wiki/CONCEPT-COVERAGE.md`"), and they only exist
+# after the relevant sub-audit has run — so an empty vault failed its own
+# documentation.
+GENERATED_REPORTS = {
+    "CONCEPT-COVERAGE.md", "GAPS-AUDIT.md", "VAULT-AUDIT.md",
+    "CLAUDE-CONTRACTS-AUDIT.md", "STATUS.md", "GAPS.md", "CLAUDE.md",
+}
+
+# Illustrative placeholder paths in templates and examples. Treating these as
+# real contracts made every vault fail on its own instructions.
+PLACEHOLDER_SEGMENTS = {
+    "X", "page-slug", "slug", "concept-a", "concept-b", "folder", "name",
+    "vault-name", "other-source-page",
+}
+
+
+def is_placeholder(link):
+    if "..." in link or "<" in link or ">" in link or "{{" in link:
+        return True
+    stem = link.split("/")[-1].replace(".md", "").strip()
+    if stem in PLACEHOLDER_SEGMENTS:
+        return True
+    return any(seg in PLACEHOLDER_SEGMENTS for seg in link.split("/"))
+
+
 
 def resolve_link(link):
     link = link.strip()
@@ -42,7 +68,10 @@ def check_page(path):
         return ("MISSING", "no matching file in vault")
     if not path.exists():
         return ("MISSING", "path does not exist")
-    content = path.read_text(encoding="utf-8")
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return ("MISSING", f"unreadable: {e}")
     if len(content) < MIN_CONTENT_BYTES:
         return ("STUB", f"only {len(content)} bytes")
     if not re.search(r"^##\s+", content, re.MULTILINE):
@@ -55,7 +84,7 @@ def main():
         print(f"No CLAUDE.md at {CLAUDE_MD}")
         sys.exit(0)
 
-    content = CLAUDE_MD.read_text(encoding="utf-8")
+    content = CLAUDE_MD.read_text(encoding="utf-8", errors="replace")
 
     # Strip fenced code blocks before extracting contracts. Fenced blocks in
     # CLAUDE.md are documentation — they show the *syntax* of a contract, using
@@ -74,6 +103,8 @@ def main():
     for m in EXPLICIT_CONTRACT.finditer(content):
         refs.append(("contract", m.group(1).strip()))
 
+    refs = [(k, l) for k, l in refs
+            if l.split('/')[-1] not in GENERATED_REPORTS and not is_placeholder(l)]
     seen = set()
     refs = [(k, l) for k, l in refs if not (l in seen or seen.add(l))]
 
