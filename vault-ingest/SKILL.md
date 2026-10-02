@@ -1,6 +1,6 @@
 ---
 name: vault-ingest
-description: Autonomously ingest all unprocessed source files from an Obsidian vault in a single run. Handles Phase 1 (scan), Phase 1.5 (briefing), Phase 3 (bulk parallel source pages, 10 at a time), Phase 4 (Pass B synthesis), and Phase 6 (index rebuild). No human re-triggering needed. Use when the user wants to "ingest everything", "run a full ingest", or "process all source files" for a vault. Requires: vault has CLAUDE.md and wiki/ directory. INGESTION-PROMPT.md is recommended; _ingest-briefing.md is created by the skill if missing.
+description: Autonomously ingest all unprocessed source files from an Obsidian vault in a single run. Handles Phase 1 (scan), Phase 2 (foundational ingest + owner check-in — fresh vaults only), Phase 1.5 (briefing), Phase 3 (bulk parallel source pages, 10 at a time), Phase 4 (Pass B synthesis), and Phase 6 (index rebuild). On a vault that already has content pages, no human re-triggering needed. Use when the user wants to "ingest everything", "run a full ingest", or "process all source files" for a vault. Requires: vault has CLAUDE.md and wiki/ directory. INGESTION-PROMPT.md is recommended; _ingest-briefing.md is created by the skill if missing.
 ---
 
 # vault-ingest
@@ -27,7 +27,7 @@ Run a full autonomous ingestion of all unprocessed source files in an Obsidian v
 
 ## Steps
 
-*Phase numbering follows the INGESTION-PROMPT.md convention. Phases 2 and 5 are manual/human-gated phases not automated here — Phase 2 (foundational ingest) is replaced by the existing wiki pages + Phase 1.5 briefing write; Phase 5 (duplicates) is handled via the skip list.*
+*Phase numbering follows the INGESTION-PROMPT.md convention. Phase 2 (foundational ingest) runs only on a **fresh vault** (see Phase 1 Step 5) — on a populated vault the existing wiki pages already supply the slug inventory, so it is skipped. Phase 5 (duplicates) is handled via the skip list plus the fresh-vault hash check. Running Phase 2 here means the user never needs to paste INGESTION-PROMPT.md alongside this skill.*
 
 ### Pre-checks
 
@@ -39,7 +39,12 @@ ls "$VAULT/CLAUDE.md" && echo "OK" || echo "MISSING CLAUDE.md — stop"
 ls "$VAULT/wiki/" && echo "OK" || echo "MISSING wiki/ — stop"
 ls "$VAULT/INGESTION-PROMPT.md" 2>/dev/null && echo "OK" || echo "INGESTION-PROMPT.md missing (recommended, not required)"
 which pdftotext >/dev/null 2>&1 && echo "pdftotext OK" || echo "WARNING: pdftotext missing — PDFs will fail. Install: brew install poppler"
+which pandoc >/dev/null 2>&1 && echo "pandoc OK" || echo "WARNING: pandoc missing — docx/pptx/odt/epub will fail. Install: brew install pandoc"
+python3 -c "import openpyxl" 2>/dev/null && echo "openpyxl OK" || echo "WARNING: openpyxl missing — xlsx will fail. Install: python3 -m pip install openpyxl"
+which tesseract >/dev/null 2>&1 && echo "tesseract OK" || echo "WARNING: tesseract missing — images and scanned PDFs will fail. Install: brew install tesseract"
 ```
+
+Missing converters don't stop the run — affected files show as `FAILED` in the Phase 1 manifest and are reported, never silently dropped.
 
 Stop if CLAUDE.md or wiki/ is missing. INGESTION-PROMPT.md is recommended (rules are read from CLAUDE.md directly if missing). `_ingest-briefing.md` is created by Phase 1.5 — not a pre-req.
 
@@ -58,27 +63,41 @@ Note the confidence default from CLAUDE.md — you'll need it when constructing 
 
 ### Phase 1 — Scan and build processing queue
 
-**Step 1: Identify all source files**
+**Step 1: Identify and extract all source files (every text format)**
+
+Phase 1 picks up **every text document in any format** — never filter by a fixed extension list. `scripts/extract_sources.py` (in this skill's directory) walks the source dir, skips hidden files/dirs, `wiki/`, `_scripts/`, `CLAUDE.md`, `INGESTION-PROMPT.md` and `README*`, and classifies each file:
+
+| Status | Formats | Handling |
+|---|---|---|
+| `NATIVE` | md, txt, csv, tsv, json/jsonl, yaml, xml, srt, vtt, log, rst, org, tex, ipynb, opml, plus any unknown extension that `file --mime-type` reports as text | Read as-is |
+| `CONVERTED` | pdf (pdftotext), docx/odt/pptx/epub (pandoc → markdown), xlsx/xlsm (openpyxl → CSV, one `## Sheet:` block per sheet), doc/rtf/rtfd/html/htm/webarchive (textutil → text) | Text written to `/tmp/vault-ingest-extract/` |
+| `OCR` | Images (png, jpg/jpeg, heic/heif, tif/tiff, gif, bmp, webp) and image-only PDFs (text layer <200 chars → pages rasterized at 300 dpi, `## Page N` per page) | tesseract text written to `/tmp/vault-ingest-extract/` |
+| `EMPTY` | Under 200 chars even after OCR (blank or unreadable doc) | Skipped; check for a sibling text file |
+| `UNSUPPORTED` | xls, ods, ppt, Apple Pages/Numbers/Keynote | Skipped; owner told which format to re-export as |
+| `NON-TEXT` | Images where OCR finds <20 chars (photos, logos), audio, video, other binaries | Skipped and listed |
+| `FAILED` | Converter missing or errored | Skipped and listed with the error |
 
 First determine where source files live. Check CLAUDE.md for a "Source Files" or "Source file location" note, then:
 
 ```bash
 VAULT=<vault-path>
-# Try vault root first
-root_count=$(find "$VAULT" -maxdepth 1 \( -name "*.md" -o -name "*.pdf" -o -name "*.txt" \) \
-  | grep -v "CLAUDE.md\|INGESTION-PROMPT.md\|README" | wc -l)
+EXTRACT=~/.claude/skills/vault-ingest/scripts/extract_sources.py
+rm -rf /tmp/vault-ingest-extract
+# Try vault root first (files directly in the root only)
+python3 "$EXTRACT" "$VAULT" --maxdepth 1 --manifest /tmp/vault-ingest-manifest.tsv
+root_count=$(tail -n +2 /tmp/vault-ingest-manifest.tsv | wc -l | tr -d ' ')
 
 if [ "$root_count" -gt 0 ]; then
   # Source files live at vault root (typical for personal-brain archetype)
   SOURCE_BASE="$VAULT"
-  find "$VAULT" -maxdepth 1 \( -name "*.md" -o -name "*.pdf" -o -name "*.txt" \) \
-    | grep -v "CLAUDE.md\|INGESTION-PROMPT.md\|README" | sort
 else
-  # Fall back to raw/ subdirectory (typical for research-wiki and project-kb archetypes)
+  # Fall back to raw/ subdirectory, recursively (typical for research-wiki and project-kb archetypes)
   SOURCE_BASE="$VAULT/raw"
-  find "$VAULT/raw" -type f \( -name "*.md" -o -name "*.pdf" -o -name "*.txt" \) 2>/dev/null | sort
+  python3 "$EXTRACT" "$SOURCE_BASE" --manifest /tmp/vault-ingest-manifest.tsv
 fi
 ```
+
+The manifest (`/tmp/vault-ingest-manifest.tsv`) has columns `status, kind, original_path, read_path, note`. From here on, **the manifest is the file list**: queue only `NATIVE`, `CONVERTED` and `OCR` rows. Every other row goes into the Phase 1 report and the completion report. None may be dropped silently.
 
 **Step 2: Build skip list from already-ingested files**
 
@@ -93,7 +112,7 @@ grep -rh '\*\*File[^:]*:\*\*' "$VAULT/wiki/sources/"*.md 2>/dev/null \
   | sort > /tmp/vault-ingest-done.txt
 ```
 
-Then for each source file in Step 1: check if its basename (e.g. `client-a-2024-01-15.md`) appears in `/tmp/vault-ingest-done.txt`. If yes, skip it.
+Then for each queued manifest row: check if the basename of its `original_path` (e.g. `client-a-2024-01-15.docx`) appears in `/tmp/vault-ingest-done.txt`. If yes, skip it. Always match on the original file, never on the `/tmp` extraction path.
 
 **Step 3: Build processing queue and compute slugs**
 
@@ -106,31 +125,78 @@ normalize_slug() {
 # Example: "Client A - Session 1 (Jan 2024).md" → "client-a-session-1-jan-2024"
 ```
 
-Use this function consistently everywhere slugs are computed. For each source file from Step 1:
-- `slug=$(normalize_slug "$(basename "$file" "${file##*.}")")`
+Use this function consistently everywhere slugs are computed. For each queued manifest row:
+- `file=<original_path>`; `slug=$(normalize_slug "$(basename "$file" ".${file##*.}")")`
 - Intended output: `$VAULT/wiki/sources/${slug}.md`
-- Check if file's basename appears in done list; if not, add to queue
+- Check if the original basename appears in done list; if not, add to queue as the pair (`original_path`, `read_path`)
+- If two queued files produce the same slug (e.g. `notes.docx` and `notes.pdf`), append the extension (`notes-docx`, `notes-pdf`)
 
 Report the queue:
 ```
-Processing queue: N files to process, N already done, N skipped (meta-files)
-PDF count: N (will pre-extract)
+Processing queue: N files to process, N already done
+By format: md N · txt N · docx N · pdf N · csv N · xlsx N · html N · ...
+Not ingested: N EMPTY · N UNSUPPORTED · N NON-TEXT · N FAILED  (list each with its note)
 ```
 
-**Step 4: Pre-extract PDFs**
+**Step 4: Conversion check**
 
-If any PDFs are in the queue:
+Conversion already happened in Step 1. For each `EMPTY` row, look for a sibling text file with the same stem (e.g. `deck.pdf` → `deck.md`/`deck.txt`) and queue that instead. Then tell the owner about every `UNSUPPORTED` and `FAILED` row, including the re-export instruction from the `note` column. Don't wait for an answer on a populated vault. Continue, and list them again in the completion report.
+
+**Step 5: Fresh-vault detection**
+
+The Phase 1.5 slug inventory is built from existing content pages. On a fresh vault it is empty, so every Phase 3 subagent writes blind and Phase 4 inherits duplicate/near-duplicate concept proposals. Detect that case:
+
 ```bash
-mkdir -p /tmp/vault-ingest-pdfs/
-for pdf in <pdf-files>; do
-  slug=$(normalize_slug "$(basename "$pdf" .pdf)")
-  pdftotext -layout "$pdf" "/tmp/vault-ingest-pdfs/${slug}.txt" 2>/dev/null || \
-    echo "IMAGE-ONLY: $pdf" >> /tmp/vault-ingest-failures.txt
-done
+content_pages=$(find "$VAULT/wiki" -mindepth 2 -name "*.md" -not -path "*/sources/*" -size +600c | wc -l | tr -d ' ')
+echo "Content pages (non-source, ≥600 B): $content_pages"
+[ "$content_pages" -eq 0 ] && echo "FRESH VAULT — run Phase 1 Step 6 + Phase 2" || echo "POPULATED VAULT — skip to Phase 1.5"
 ```
 
-For any PDF that produced near-empty output (<500 chars), mark as IMAGE-ONLY and skip.
-For successfully extracted PDFs: use the extracted .txt file as the source for Phase 3 (not the PDF).
+The `-size +600c` filter ignores scaffold stubs left by `/vault-init`. If the vault is populated, skip Step 6 and Phase 2 entirely and go to Phase 1.5.
+
+**Step 6: Fresh vault only — inventory report + owner check-in (STOP)**
+
+1. **Near-duplicates:** hash every queued text file and log any matching pairs:
+   ```bash
+   tail -n +2 /tmp/vault-ingest-manifest.tsv | awk -F'\t' '$4!=""{print $4}' | tr '\n' '\0' \
+     | xargs -0 shasum -a 256 \
+     | sort | awk '{h=$1; $1=""; if (h==prev) print "DUP:" $0 " == " prevf; prev=h; prevf=$0}'
+   ```
+   This hashes the readable text of every queued file, converted ones included, so a `.docx` and its `.pdf` export are caught when their text matches exactly.
+   Also flag files whose names differ only by suffix (e.g. `Lesson 12.txt` vs `Lesson 12 - Notes.txt`, transcript vs slides) — these are grouping decisions, not duplicates.
+2. **Dates:** for dated files, open the first ~50 lines and compare the internal date to the filename date. Record discrepancies for the source page `Note:` field.
+3. **Report to the owner** (table: category | path | file count | notes), then propose:
+   - Which 4–10 files are foundational for Phase 2 (courses, methodology overviews, primary frameworks — judged by concept coverage, not file size)
+   - Grouping rules (e.g. transcript + notes = one source page; slides fold into their parent session)
+   - Any distinct-but-similar frameworks to keep as separate pages
+   - Batching plan for Phase 3
+4. Append the scan to `wiki/log.md` under `## Pass 1: Scan`.
+5. **STOP and wait for owner approval.** Grouping and foundational-file choices shape every downstream page and cannot be inferred safely. Record the owner's decisions in `wiki/log.md` before continuing. Apply grouping rules to the queue (a grouped unit = one queue entry with multiple file paths).
+
+### Phase 2 — Foundational ingest (fresh vault only, main context)
+
+**Gate:** owner approved the Step 6 plan. Skip this phase on a populated vault.
+
+Purpose: establish the concept/entity/framework slug inventory that Phase 3 subagents link to, so they don't each invent their own names for the same idea. Judge scope by coverage, not file size.
+
+For each approved foundational file (or grouped unit), in main context:
+
+1. Read it fully (chunk with `offset`/`limit` if >2000 lines).
+2. Check the internal date against the filename date.
+3. Write `wiki/sources/<slug>.md` per the Source Page Template (same template as Phase 1.5). One line per raw file in `**File path:**` so the skip list and audit count every file in a group.
+4. Create the foundational concept / technique / entity pages per the Page Template in CLAUDE.md, using the CLAUDE.md confidence default. Every page must be ≥600 bytes of real extracted content — no placeholder stubs.
+5. Reserve (list, don't create) slugs the owner wants built in Phase 4 — e.g. one page per lesson, or two distinct framework versions. Put them in the briefing's slug inventory under `## Reserved Slugs (Phase 4 will build — link to these, do not create)`.
+6. Backfill each foundational source page's `## Pages Created/Updated` from the pages it actually fed.
+7. Remove the foundational files from the Phase 3 queue.
+8. Append to `wiki/log.md`:
+   ```markdown
+   ## Phase 2: Foundational ingest — [date]
+   - Source pages: [list]
+   - Foundational pages created (N): [by folder]
+   - Reserved slugs: [list]
+   ```
+
+Then continue to Phase 1.5 — its shell inventory now picks up the Phase 2 pages automatically.
 
 ### Phase 1.5 — Write proper _ingest-briefing.md
 
@@ -199,6 +265,14 @@ Write `$VAULT/wiki/_ingest-briefing.md` with ALL of the following sections (subs
 
 [paste contents of /tmp/vault-ingest-slugs.txt]
 
+## Reserved Slugs (Phase 4 will build — link to these, do not create)
+
+[Fresh vault only: reserved slugs from Phase 2. Omit section if none.]
+
+## Owner Grouping Decisions
+
+[Fresh vault only: grouping rules approved in Phase 1 Step 6, e.g. "transcript + Lesson Notes = one source page". Omit section if none.]
+
 ## Source Page Template
 
 Every wiki/sources/<slug>.md must follow this exact structure:
@@ -211,7 +285,7 @@ Every wiki/sources/<slug>.md must follow this exact structure:
 - **Type:** [coaching call | group call | course module | interview | protocol doc | etc.]
 - **Content Date:** [original date — NOT today's date]
 - **Domain(s):** [list all that apply]
-- **File path:** [filename]
+- **File path:** [ORIGINAL source file path as given in your prompt — never the /tmp extraction path]
 
 ## Abstract / Key Question
 [3 sentences: what this file is + what question it answers + why it matters]
@@ -265,7 +339,11 @@ Fire 10 subagents per turn, all with `run_in_background: true`. Each subagent ha
 Read this briefing in full: [VAULT_PATH]/wiki/_ingest-briefing.md
 
 Then read this source file in full:
-[SOURCE_FILE_FULL_PATH]
+[READ_PATH from manifest]
+
+Original file (use exactly this in **File path:**): [ORIGINAL_PATH from manifest]
+[If READ_PATH ≠ ORIGINAL_PATH, add: "This is a text extraction of a [kind] file. Tables, slides and sheets may have lost layout. Note anything that looks garbled as GAP:."]
+[If status = OCR, add instead: "This text was OCR'd from an image or scanned PDF. Expect misreads, especially numbers, names and short words (e.g. 'Q3' read as '03'). Quote it in Source Language only where it is clearly legible. Add an ASSUMPTION: marker on any number, price or name you had to interpret. For chat screenshots, speaker labels and message order may be scrambled. Never guess who said what. Flag it as GAP: instead."]
 
 For files over 2000 lines: read in 1000-line chunks (offset=0, limit=1000; then offset=1000, limit=1000; continue until end of file). Mark each unread portion as: GAP: lines N–M not read — large file, chunk limit reached.
 
@@ -458,6 +536,7 @@ After Phase 7 audit passes, report:
 **Source pages created:** N / N queued
 **Phase 4 promotions:** N (nomination-based) + N (frequency-based) = N new concept pages
 **Failed files:** N (list below if any)
+**Not ingested (from manifest):** N EMPTY · N UNSUPPORTED · N NON-TEXT · N FAILED (list each with its note)
 **Estimated source coverage:** N% (new source pages / total source files)
 
 **Vault audit score (Phase 7):** N / 100
@@ -474,7 +553,7 @@ Next: review ASSUMPTION markers and triage the CONCEPT-COVERAGE candidates. Run 
 
 - **Rate limit (HTTP 429/529):** Auto-retry is acceptable — re-queue into the next batch. If the same file rate-limits 3× consecutively, mark PERMANENT_FAIL and skip.
 - **All other failures:** Log as FAILED, report to user at end. Do NOT auto-retry — these need human inspection.
-- **Image-only PDF:** Logged in Phase 1 Step 4. Skip in Phase 3.
+- **EMPTY / UNSUPPORTED / NON-TEXT / FAILED manifest rows:** Logged in Phase 1, skipped in Phase 3, listed again in the completion report with the `note` column (e.g. "export from Numbers as .xlsx or .csv"). Once the owner re-exports, a re-run picks the file up automatically.
 - **Large file (>2000 lines):** 1000-line chunk instruction is in the subagent prompt. Subagent marks each unread portion as `GAP: lines N–M not read — large file, chunk limit reached`.
 - **Subagent returns verbose output instead of CREATED/FAILED:** Log as FAILED. Never re-parse verbose output.
 - **Session interrupted mid-Phase-3:** Re-run /vault-ingest. Skip list rebuilds from `**File path:**` fields. Only files without a matching source page get queued.
@@ -484,6 +563,9 @@ Next: review ASSUMPTION markers and triage the CONCEPT-COVERAGE candidates. Run 
 - Process files already in wiki/sources/ — always skips those
 - Create concept/framework/entity pages during Phase 3 — only source pages
 - Handle encrypted or password-protected PDFs
+- Convert legacy/proprietary formats with no local converter (xls, ods, ppt, Apple Pages/Numbers/Keynote). They're reported as `UNSUPPORTED` with re-export instructions.
+- Transcribe audio/video. They're reported as `NON-TEXT`.
+- Guarantee OCR accuracy. tesseract handles clean screenshots and scans well, but stylized fonts, low-contrast chat bubbles and handwriting degrade it. OCR'd source pages carry the misread warning from the Phase 3 prompt.
 
 ## Related skills
 
