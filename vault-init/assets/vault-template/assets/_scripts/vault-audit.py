@@ -398,7 +398,9 @@ def score_integrity(cfg, pages, srcs, contract_fails, contract_checked):
               anchor(contract_fails, 5, 2, 0, higher_is_better=False),
               f"{contract_fails} broken or stub of {contract_checked} references from CLAUDE.md")
 
-    known = {p["stem"] for p in pages} | {s.stem for s in srcs}
+    # Any page that exists under wiki/ resolves, including root files like
+    # domain-index-*.md and index.md that aren't concept pages.
+    known = {p["stem"] for p in pages} | {s.stem for s in srcs} | {f.stem for f in WIKI.rglob("*.md")}
     total_links = resolved = 0
     inbound = {p["stem"]: 0 for p in pages}
     for p in pages:
