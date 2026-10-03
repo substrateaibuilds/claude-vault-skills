@@ -107,12 +107,14 @@ Check by the `**File path:**` field in existing source pages — NOT by slug-nam
 # Extract the File field from all existing source pages.
 # Handles both "**File:**" (hand-crafted) and "- **File path:**" (template-generated with leading bullet).
 # The \*\*File[^:]*:\*\* pattern catches both variants mid-line.
-grep -rh '\*\*File[^:]*:\*\*' "$VAULT/wiki/sources/"*.md 2>/dev/null \
-  | sed 's/.*\*\*File[^:]*:\*\* //' | tr -d '`' | sed 's/^[[:space:]]*//' \
-  | sort > /tmp/vault-ingest-done.txt
+grep -rh '\*\*File path:\*\*' "$VAULT/wiki/sources/"*.md 2>/dev/null \
+  | sed 's/.*\*\*File path:\*\* //' | grep -o '`[^`]*`' | tr -d '`' \
+  | sed "s/[’‘]/'/g" | awk -F/ '{print tolower($NF)}' | sort -u > /tmp/vault-ingest-done.txt
 ```
 
-Then for each queued manifest row: check if the basename of its `original_path` (e.g. `client-a-2024-01-15.docx`) appears in `/tmp/vault-ingest-done.txt`. If yes, skip it. Always match on the original file, never on the `/tmp` extraction path.
+Then for each queued manifest row, take the basename of its `original_path` (e.g. `client-a-2024-01-15.docx`), lowercase it, and convert curly apostrophes to `'`. If the result is an exact line in `/tmp/vault-ingest-done.txt` (`grep -qxF`), skip the file. Always match on the original file, never on the `/tmp` extraction path.
+
+**Sanity check before Phase 3:** if the queue holds more than 20% of the files on a vault that already has source pages, stop and compare a few queued files against the existing source pages. A large queue on a populated vault usually means the `File path` fields use a format the skip list can't read, such as `X.txt + .md` shorthand or several files on one line. Fix those fields to one exact path per line, then re-run. Ingesting anyway would create duplicate source pages.
 
 **Step 3: Build processing queue and compute slugs**
 
@@ -285,7 +287,8 @@ Every wiki/sources/<slug>.md must follow this exact structure:
 - **Type:** [coaching call | group call | course module | interview | protocol doc | etc.]
 - **Content Date:** [original date — NOT today's date]
 - **Domain(s):** [list all that apply]
-- **File path:** [ORIGINAL source file path as given in your prompt — never the /tmp extraction path]
+- **File path:** `[ORIGINAL source file path as given in your prompt — never the /tmp extraction path]`
+[One `- **File path:**` line per raw file, exact path in backticks, nothing else on the line. A page covering a transcript + notes pair gets two lines. Put any commentary on a separate `- **Source note:**` line. The skip list and the audit both parse this field; shorthand like `X.txt + .md` makes files look un-ingested.]
 
 ## Abstract / Key Question
 [3 sentences: what this file is + what question it answers + why it matters]
